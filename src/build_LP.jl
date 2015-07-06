@@ -16,7 +16,7 @@ SAMPLE_SIZE = 100000
 TURN_COST = 10.
 
 LAMBDA = 1e2
-LAMBDA_VALUES = [0, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0]
+LAMBDA_VALUES = [0.]#, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0]
 
 function build_LP(
 	manhattan::Manhattan,
@@ -257,7 +257,6 @@ function test_lambda_values(
 		close(infoFile)
 	end
 	close(f)
-	return 0
 end
 
 manhattan = loadCityGraph()

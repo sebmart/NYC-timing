@@ -3,18 +3,16 @@
 # Authored by Arthur J Delarue on 6/9/15
 
 using HDF5, JLD
+using Clustering
 @everywhere using LightGraphs
 @everywhere using Dates
 @everywhere using JuMP, Gurobi
 @everywhere using MathProgBase
 @everywhere using Base.Collections
 @everywhere using DataStructures
-using Clustering
-@everywhere include("../src/definitions.jl")
-@everywhere include("../src/cities/manhattan.jl")
-include("../src/cities/squareCity.jl")
-#@everywhere include("../src/tools/print.jl")
-@everywhere include("../src/tools/shortestpath.jl")
-include("LP_tools.jl")
-include("preprocess.jl")
-include("load_constraints.jl")
+@everywhere include("LP_tools/definitions.jl")
+@everywhere include("LP_tools/manhattan.jl")
+@everywhere include("LP_tools/shortestpath.jl")
+include("LP_tools/LP_tools.jl")
+include("LP_tools/preprocess.jl")
+include("LP_tools/load_constraints.jl")

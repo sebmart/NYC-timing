@@ -73,9 +73,9 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
 	if preprocess
-		dataFile = "Travel_times/travel_times_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
+		dataFile = "../Travel_times/travel_times_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
 	else
-		dataFile = "Travel_times/travel_times_r$(radius)_wd_$(times).csv"
+		dataFile = "../Travel_times/travel_times_r$(radius)_wd_$(times).csv"
 	end
 	println("-- Loading from $dataFile...")
 	data = readcsv(dataFile)
