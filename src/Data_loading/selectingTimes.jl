@@ -1,3 +1,5 @@
+using HDF5, JLD, KDTrees, DataFrames
+
 function selectingTimes (start::Int64, finish::Int64, radius::Float64)
 	cd("/Users/bzeng/Dropbox (MIT)/7 Coding/UROP/Data")
 
@@ -7,22 +9,24 @@ function selectingTimes (start::Int64, finish::Int64, radius::Float64)
 	nodePositions = load("manhattan.jld","positions")
 	numRides = zeros(Int64, length(nodePositions), length(nodePositions))
 	avgTime = zeros(Float32, length(nodePositions), length(nodePositions))
-
+	
 	nodes = Array(Float64, (2,length(nodePositions)))
 	for (i,p) in enumerate(nodePositions)
 	    nodes[1,i] = p[1]
 	    nodes[2,i] = p[2]
 	end
 
+	
 	tree = KDTree(nodes)
-	pnode = Int[knn(tree,[px[i],py[i]],1)[1][1] for i in 1:length(px)]
-	dnode = Int[knn(tree,[dx[i],dy[i]],1)[1][1] for i in 1:length(dx)]df
+	# pnode = Int[knn(tree,[px[i],py[i]],1)[1][1] for i in 1:length(px)]
+	# dnode = Int[knn(tree,[dx[i],dy[i]],1)[1][1] for i in 1:length(dx)]df
 
 	function coordinatesToNode(x::Float32, y::Float32)
 		return inball(tree, [x, y], radius, false)
 	end
 
 	for i = 1:12
+		println(i)
 		df = 0
 		df = readtable("reduced_trip_data_$(i).csv");
 		for j = 1:nrow(df)
@@ -54,4 +58,6 @@ function selectingTimes (start::Int64, finish::Int64, radius::Float64)
 
 	writetable("trip_data_$(startingHour)_$(endingHour).csv", df)
 end
+
+@time selectingTimes(12, 14, 140.0)
 
