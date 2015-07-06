@@ -389,7 +389,7 @@ end
         # Add extra edge weight appropriately
         # Make sure not to add weight if the node has only one incoming edge and one outgoing edge
         angle = getAngleEdges(coords[src].x, coords[src].y, coords[i].x, coords[i].y, coords[dst].x, coords[dst].y)
-        if angle < pi/4 || length(inn[i]) == 1
+        if -7*pi/8 < angle < 3*pi/8 || length(inn[i]) == 1
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst]
         else
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst] + turn_cost
