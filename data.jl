@@ -1,4 +1,4 @@
-num = 6
+num = 12
 
 using DataFrames, Geodesy, KDTrees
 cd("/Users/bzeng/Dropbox (MIT)/7 Coding/UROP/Data")
