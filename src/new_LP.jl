@@ -2,10 +2,10 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "lin"
-MAX_ROUNDS = 1
+MODEL = "quad"
+MAX_ROUNDS = 5
 MIN_RIDES = 3
-RADIUS = 40
+RADIUS = 140
 TIMES = "1214"
 
 PREPROCESS = true
@@ -14,7 +14,7 @@ SAMPLE_SIZE = 50000
 
 TURN_COST = 10.
 
-LAMBDA = 1e-5
+LAMBDA = 1e-3
 
 function new_LP(
 	manhattan::Manhattan,
@@ -56,10 +56,10 @@ function new_LP(
 
 	# Create JuMP model
 	println("**** Creating LP instance ****")
-	m = Model(solver=GurobiSolver(TimeLimit=200))#, Method=1))
+	m = Model(solver=GurobiSolver(TimeLimit=1000, Method=2))
 
 	# Add one variable for each road
-	@defVar(m, t[i=nodes,j=out[i]])
+	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
 
 	# Add regularization variables
 	pairs = [find(travel_times[i,:]) for i=nodes]
@@ -76,12 +76,14 @@ function new_LP(
 	end
 
 	# Add bounds on variables
-	for i in nodes, j in out[i]
-		@addConstraint(m, t[i,j] >= roadTimes[i,j])
-	end
+	# for i in nodes, j in out[i]
+	# 	@addConstraint(m, t[i,j] >= roadTimes[i,j])
+	# end
 
-	# Keep track of number of path constraints added at each round
-	numPathConstraints = zeros(max_rounds)
+	# Create handles for all constraints
+	numConstraints = sum([length(pairs[i]) for i=nodes])
+	@defConstrRef lower[1:numConstraints,1:max_rounds]
+	@defConstrRef higher[1:numConstraints,1:max_rounds]
 
 	status = 0
 	newTimes = roadTimes
@@ -94,7 +96,7 @@ function new_LP(
 
 	l = 1
 	while l <= max_rounds
-		setSolver(m, GurobiSolver(TimeLimit=200))#, Method=1))
+		setSolver(m, GurobiSolver(TimeLimit=1000, Method=2))
 		println("###### ROUND $l ######")
 		# Add path constraints
 		println("**** Adding constraints ****")
@@ -116,12 +118,15 @@ function new_LP(
 				push!(lowerBounds, travelTimes[i,j])
 			end
 		end
-		numPathConstraints[l] = length(lowerBounds)
 		paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurnsParallel(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, newTimes, new_edge_dists)
-		@addConstraint(m, higher[i=1:length(lowerBounds),j=l], sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - lowerBounds[i] >= - epsilon[paths[i][1],paths[i][end]])
-		@addConstraint(m, lower[i=1:length(lowerBounds),j=l], sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - lowerBounds[i] <= epsilon[paths[i][1],paths[i][end]])
+		for i=1:numConstraints
+			higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] + epsilon[paths[i][1],paths[i][end]] >= lowerBounds[i])
+			lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - epsilon[paths[i][1],paths[i][end]] <= lowerBounds[i])
+		end
 		if l > 1
-			chgConstraintRHS(lower[i=1:numPathConstraints[l-1], j=(l-1)], TMAX)
+			for i=1:numConstraints
+				chgConstrRHS(lower[i, l-1], TMAX)
+			end
 		end
 		toc()
 
@@ -136,17 +141,6 @@ function new_LP(
 			break
 		# Prepare output
 		elseif status == :Optimal
-			if l == max_rounds
-				counter = 0
-				epsi = getValue(epsilon)
-				for element in epsi
-					if element[3] != 0
-						counter += 1
-					end
-				end
-				println("VIOLATED CONSTRAINTS: ", counter)
-				appendDataToFile("Outputs/$TESTDIR", counter)
-			end
 			st = getValue(t)
 			newTimes = spzeros(length(nodes), length(nodes))
 			for element in st
@@ -155,10 +149,6 @@ function new_LP(
 			# Save updated Manhattan road times to file
 			saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
 			# Check if convergence criterion is satisfied
-			if violated_constraints == 0
-				println("###### OPTIMUM REACHED ######")
-				break
-			end
 		elseif status == :UserLimit
 			println("!!!! User time limit exceeded !!!!")
 			break

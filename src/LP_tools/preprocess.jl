@@ -6,9 +6,9 @@ function outputPreprocessedConstraints(manhattan::Manhattan;radius::Int=40, numC
 	"""
 	Checks if particular preprocessed file already exists. If so, does nothing. Otherwise, generates it.
 	"""
-	if overwrite || !isfile("Travel_times/travel_times_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
+	if overwrite || !isfile("../Travel_times/travel_times_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
 		println("**** Selecting travel times ****")
-		inputName = "Travel_times/travel_times_r$(radius)_wd_1214"
+		inputName = "../Travel_times/travel_times_r$(radius)_wd_1214"
 		preprocess(inputName, numClusters, minRides, sampleSize, manhattan)
 	else
 		println("**** Selected travel times found ****")
@@ -35,6 +35,7 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 	R = kmeans(coordinateMatrix, numClusters, maxiter = 1000)
 
 	# Read in rides
+	println("---- Reading CSV ----")
 	rides = readcsv("$(inputName).csv")
 	nodes = rides[:,1]
 	average = rides[:,2]
@@ -55,10 +56,15 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 	givenRides = Dict{Tuple{Int64,Int64}, Vector{Int}}()
 	selectedRides = Dict{Tuple{Int64,Int64}, Vector{Bool}}()
 
-	# Load rides into memory
 	println("---- Loading rides ----")
+	# Load rides into memory
 	for i = 1:length(nodes)
-		if numRides[i] >= minRides
+		if i % 10000 == 0
+			@printf("                                \r")
+			@printf("Progress: %.1f%% completed\r", 100*i/length(nodes))
+		end
+		# Check that there are enough rides and that the time is not ridiculously small
+		if numRides[i] >= minRides && average[i] >= 60
 			src, dest = extractNodes(nodes[i])
 			# Check that we are not starting or ending on a highway (makes no sense)
 			if !(src in highwayNodes) && !(dest in highwayNodes) && src != dest

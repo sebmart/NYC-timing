@@ -73,9 +73,9 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
 	if preprocess
-		dataFile = "Travel_times/travel_times_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
+		dataFile = "../Travel_times/travel_times_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
 	else
-		dataFile = "Travel_times/travel_times_r$(radius)_wd_$(times).csv"
+		dataFile = "../Travel_times/travel_times_r$(radius)_wd_$(times).csv"
 	end
 	println("-- Loading from $dataFile...")
 	data = readcsv(dataFile)
@@ -87,11 +87,11 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	travelTimes = zeros(num_nodes,num_nodes)
 	for (i, element) in enumerate(nodePairs)
 		node = split(element, ";")
+		# Remember +1 because Python indexes from 0 but Julia from 1
 		src = int(node[1]) + 1
 		dest = int(node[2]) + 1
-		if minRides[i] >= min_rides && src != dest && !(src in highwayNodes) && !(dest in highwayNodes)
+		if minRides[i] >= min_rides && average[i] >= 60 && src != dest && !(src in highwayNodes) && !(dest in highwayNodes)
 			travelTimes[src, dest] = average[i]
-			# Remember +1 because Python indexes from 0 but Julia from 1
 		end
 	end
 	return travelTimes
