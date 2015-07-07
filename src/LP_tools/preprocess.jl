@@ -6,9 +6,9 @@ function outputPreprocessedConstraints(manhattan::Manhattan;radius::Int=40, numC
 	"""
 	Checks if particular preprocessed file already exists. If so, does nothing. Otherwise, generates it.
 	"""
-	if overwrite || !isfile("../Travel_times/training_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
+	if overwrite || !isfile("../Travel_times/travel_times_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
 		println("**** Selecting travel times ****")
-		inputName = "../Travel_times/training_r$(radius)_wd_1214"
+		inputName = "../Travel_times/travel_times_r$(radius)_wd_1214"
 		preprocess(inputName, numClusters, minRides, sampleSize, manhattan)
 	else
 		println("**** Selected travel times found ****")

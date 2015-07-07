@@ -3,7 +3,7 @@
 # Authored by Arthur J Delarue on 7/2/15
 
 MODEL = "quad"
-MAX_ROUNDS = 3
+MAX_ROUNDS = 1
 MIN_RIDES = 3
 RADIUS = 140
 TIMES = "1214"
@@ -13,8 +13,6 @@ NUM_CLUSTERS = 50
 SAMPLE_SIZE = 50000
 
 TURN_COST = 10.
-
-LAMBDA = 1e-6
 
 function new_LP(
 	manhattan::Manhattan,
@@ -166,7 +164,7 @@ function new_LP(
 
 	# Make sure epsilon are no longer decision variables
 	@addConstraint(m, e[i=nodes, j=pairs[i]], epsilon[i,j] == epsilonValues[i,j])
-	
+
 	# Solve
 	solve(m)
 

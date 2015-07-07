@@ -97,7 +97,7 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	return travelTimes
 end
 
-function loadTrainingTravelTimeData(;radius::Int=40, times::String="1214", num_nodes:Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
+function loadTrainingTravelTimeData(;radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
 	"""
 	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
 	"""
