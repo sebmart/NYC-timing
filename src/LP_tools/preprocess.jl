@@ -6,9 +6,9 @@ function outputPreprocessedConstraints(manhattan::Manhattan;radius::Int=40, numC
 	"""
 	Checks if particular preprocessed file already exists. If so, does nothing. Otherwise, generates it.
 	"""
-	if overwrite || !isfile("../Travel_times/travel_times_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
+	if overwrite || !isfile("../Travel_times/training_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
 		println("**** Selecting travel times ****")
-		inputName = "../Travel_times/travel_times_r$(radius)_wd_1214"
+		inputName = "../Travel_times/training_r$(radius)_wd_1214"
 		preprocess(inputName, numClusters, minRides, sampleSize, manhattan)
 	else
 		println("**** Selected travel times found ****")
@@ -36,18 +36,7 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	# Read in rides
 	println("---- Reading CSV ----")
-	rides = readcsv("$(inputName).csv")
-	nodes = rides[:,1]
-	average = rides[:,2]
-	stddev = rides[:,3]
-	stderr = rides[:,4]
-	numRides = rides[:,5]
-
-	function extractNodes(nodePair::SubString{ASCIIString})
-		source = parse(Int, split(nodePair, ";")[1]) + 1
-		dest = parse(Int, split(nodePair, ";")[2]) + 1
-		return source, dest
-	end
+	data = readtable("$(inputName).csv")
 
 	function classify(source::Int, dest::Int, clusterAssignments::Vector{Int64})
 		return (clusterAssignments[source], clusterAssignments[dest])
@@ -58,14 +47,15 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	println("---- Loading rides ----")
 	# Load rides into memory
-	for i = 1:length(nodes)
+	for i = 1:nrow(data)
 		if i % 10000 == 0
 			@printf("                                \r")
 			@printf("Progress: %.1f%% completed\r", 100*i/length(nodes))
 		end
 		# Check that there are enough rides and that the time is not ridiculously small
-		if numRides[i] >= minRides && average[i] >= 60
-			src, dest = extractNodes(nodes[i])
+		if data[i, :numberOfRides] >= minRides
+			src = data[i, :node1]
+			dest = data[i, :node2]
 			# Check that we are not starting or ending on a highway (makes no sense)
 			if !(src in highwayNodes) && !(dest in highwayNodes) && src != dest
 				clusterPair = classify(src, dest, R.assignments)
@@ -109,5 +99,5 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	# Sort the ride ids thus obtained so that we can quickly extract them
 	sort!(result)
-	writecsv("$(inputName)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv", rides[result,:])
+	writetable("$(inputName)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv", data[result,:])
 end

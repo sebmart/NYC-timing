@@ -1,3 +1,7 @@
+# data.jl
+# Takes in month of data, returns smaller (reduced) CSV with only relevant information for link time determination
+# Authored by Brandon Zeng on 7/7/15
+
 num = 12
 
 using DataFrames, Geodesy, KDTrees

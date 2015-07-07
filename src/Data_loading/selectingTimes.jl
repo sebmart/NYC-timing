@@ -1,3 +1,7 @@
+# selectingTimes.jl
+# From reduced CSV data files, returns list of node pairs with average travel times.
+# Authored by Brandon Zeng on 7/7/15
+
 using HDF5, JLD, KDTrees, DataFrames
 
 function selectingTimes (start::Int64, finish::Int64, radius::Float64)

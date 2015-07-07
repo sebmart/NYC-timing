@@ -3,7 +3,7 @@
 # Authored by Arthur J Delarue on 7/2/15
 
 MODEL = "quad"
-MAX_ROUNDS = 5
+MAX_ROUNDS = 3
 MIN_RIDES = 3
 RADIUS = 140
 TIMES = "1214"
@@ -14,7 +14,7 @@ SAMPLE_SIZE = 50000
 
 TURN_COST = 10.
 
-LAMBDA = 1e-3
+LAMBDA = 1e-6
 
 function new_LP(
 	manhattan::Manhattan,
@@ -27,8 +27,7 @@ function new_LP(
 	preprocess::Bool=PREPROCESS,
 	num_clusters::Int=NUM_CLUSTERS,
 	sample_size::Int=SAMPLE_SIZE,
-	turnCost::Float64=TURN_COST,
-	lambda::Float64=LAMBDA)
+	turnCost::Float64=TURN_COST)
 
 	graph = manhattan.network
 	roadTimes = manhattan.roadTime
@@ -48,15 +47,15 @@ function new_LP(
 		mkdir("Outputs/$TESTDIR")
 	end
 	# Add vital information to file
-	writeDataToFile("Outputs/$TESTDIR", model_type, max_rounds, min_rides, radius, preprocess, num_clusters, sample_size, turnCost, lambda)
+	writeDataToFile("Outputs/$TESTDIR", model_type, max_rounds, min_rides, radius, preprocess, num_clusters, sample_size, turnCost)
 
-	println("-- Saving outputs to directory Outputs/$(TESTDIR)/")
 	# Create output csv file to save algorithm data
+	println("-- Saving outputs to directory Outputs/$(TESTDIR)/")
 	outputFile = open("Outputs/$TESTDIR/algorithm_output.csv", "w")
 
 	# Create JuMP model
 	println("**** Creating LP instance ****")
-	m = Model(solver=GurobiSolver(TimeLimit=1000, Method=2))
+	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2))
 
 	# Add one variable for each road
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
@@ -66,19 +65,7 @@ function new_LP(
 	@defVar(m, epsilon[i=nodes,j=pairs[i]] >= 0)
 
 	# Define objective function
-	if model_type == "lin"
-		@setObjective(m, Min, lambda * sum{ t[i,j]/distances[i,j], i=nodes, j=out[i] } + sum{ epsilon[i,j]/sqrt(travel_times[i,j]), i=nodes, j=pairs[i]})
-	elseif model_type == "quad"
-		@setObjective(m, Min, lambda * sum{ t[i,j] * t[i,j]/(distances[i,j] * distances[i,j]), i=nodes, j=out[i] } + sum{ epsilon[i,j]/sqrt(travelTimes[i,j]), i=nodes, j=pairs[i]})
-	else
-		println("!!!! INVALID MODEL !!!!")
-		return 0,0
-	end
-
-	# Add bounds on variables
-	# for i in nodes, j in out[i]
-	# 	@addConstraint(m, t[i,j] >= roadTimes[i,j])
-	# end
+	@setObjective(m, Min, sum{ epsilon[i,j]/sqrt(travel_times[i,j]), i=nodes, j=pairs[i]})
 
 	# Create handles for all constraints
 	numConstraints = sum([length(pairs[i]) for i=nodes])
@@ -96,7 +83,7 @@ function new_LP(
 
 	l = 1
 	while l <= max_rounds
-		setSolver(m, GurobiSolver(TimeLimit=1000, Method=2))
+		# setSolver(m, GurobiSolver(TimeLimit=10000, Method=2))
 		println("###### ROUND $l ######")
 		# Add path constraints
 		println("**** Adding constraints ****")
@@ -148,7 +135,6 @@ function new_LP(
 			end
 			# Save updated Manhattan road times to file
 			saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
-			# Check if convergence criterion is satisfied
 		elseif status == :UserLimit
 			println("!!!! User time limit exceeded !!!!")
 			break
@@ -157,9 +143,41 @@ function new_LP(
 			println("**** Computing shortest paths ****")
 			@time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, newTimes, manhattan.positions, turn_cost=turnCost)
 			@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
+		else
+			epsilonValues = zeros(length(nodes), length(nodes))
+			epsilonResult = getValue(epsilon)
+			for element in epsilonResult
+				epsilonValues[element[1], element[2]] = element[3]
+			end
 		end
 		l += 1
 	end
+
+	# Enter second phase of LP, set new objective
+	println("#### FINAL ROUND ####")
+	if model_type == "lin"
+		@setObjective(m, Min, sum{ t[i,j]/distances[i,j], i=nodes, j=out[i]})
+	else
+		@setObjective(m, Min, sum{ t[i,j] * t[i,j]/(distances[i,j] * distances[i,j]), i=nodes, j=out[i] })
+	end
+
+	# Reset solver
+	setSolver(m, GurobiSolver(TimeLimit=1000))
+
+	# Make sure epsilon are no longer decision variables
+	@addConstraint(m, e[i=nodes, j=pairs[i]], epsilon[i,j] == epsilonValues[i,j])
+	
+	# Solve
+	solve(m)
+
+	# Get final edge times and save
+	st = getValue(t)
+	newTimes = spzeros(length(nodes), length(nodes))
+	for element in st
+		newTimes[element[1], element[2]] = element[3]
+	end
+	saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$(l+1)")
+
 	close(outputFile)
 	return status, newTimes
 end

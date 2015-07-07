@@ -600,8 +600,7 @@ function writeDataToFile(directory::String,
     preprocess::Bool=false,
     num_clusters::Int=0,
     sample_size::Int=0,
-    turnCost::Float64=0.,
-    lambda::Float64=0.)
+    turnCost::Float64=0.)
     """
     Writes relevant information for the LP to a file in the provided directory.
     """
@@ -613,7 +612,6 @@ function writeDataToFile(directory::String,
     write(outputFile, string("Max iterations:\t", max_rounds, "\n"))
     write(outputFile, string("Min # of rides:\t", min_rides, "\n"))
     write(outputFile, string("Node radius   :\t", radius, "m\n"))
-    write(outputFile, string("Lambda        :\t",lambda, "\n"))
     if preprocess
         write(outputFile, "Preprocessing :\tON\n")
         write(outputFile, string("# of clusters :\t", num_clusters, "\n"))

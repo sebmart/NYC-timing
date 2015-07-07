@@ -96,3 +96,30 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	end
 	return travelTimes
 end
+
+function loadTrainingTravelTimeData(;radius::Int=40, times::String="1214", num_nodes:Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
+	"""
+	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
+	"""
+	println("**** Loading travel time data ****")
+	# Load Manhattan highway nodes
+	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
+	if preprocess
+		dataFile = "../Travel_times/training_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
+	else
+		dataFile = "../Travel_times/training_r$(radius)_wd_$(times).csv"
+	end
+	println("-- Loading from $dataFile...")
+	data = readTable(dataFile)
+	travelTimes = zeros(num_nodes,num_nodes)
+	numRides = zeros(Int, (num_nodes, num_nodes))
+	for i = 1:nrow(data)
+		src = data[i, :node1]
+		dst = data[i, :node2]
+		if src != dst && !(src in highwayNodes) && !(dst in highwayNodes)
+			travelTimes[src, dst] = data[i, :averageTime]
+			numRides[src, dst] = data[i, :numberOfRides]
+		end
+	end
+	return travelTimes, numRides
+end

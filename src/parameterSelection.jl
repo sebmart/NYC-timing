@@ -1,3 +1,7 @@
+# parameterSelection.jl
+# Code for machine learning determination of parameters in link time determination methods
+# Authored by Brandon Zeng on 7/7/15
+
 cd("/Users/bzeng/Dropbox (MIT)/7 Coding/UROP/NYC-timing")
 rides = readcsv("manhattan_rides_wd_1214.csv")
 numRides = convert(Int, length(rides) / 5)
@@ -27,7 +31,7 @@ function partitionSet(k::Int64)
 end
 
 # Given a set of parameters and a set of rides, determines hat(T_AB) (estimated road times)
-function Arthur(paramaters::Float64, indices::Vector{Int64})
+function Arthur(parameters::Float64, indices::Vector{Int64})
 	return 0
 end
 
@@ -57,7 +61,7 @@ for i = 1:k
 			push!(test, trainingSubsets[subset, j])
 		end
 	end
-	computedRoadTime = Arthur(paramater, test)
+	computedRoadTime = Arthur(parameter, test)
 	error = testError(computedRoadTime, originalRoadTime)
 	bias += error[1]
 	variance += error[2]

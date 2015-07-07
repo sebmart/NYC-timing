@@ -4,6 +4,7 @@
 
 using HDF5, JLD
 using Clustering
+@everywhere using DataFrames
 @everywhere using LightGraphs
 @everywhere using Dates
 @everywhere using JuMP, Gurobi
