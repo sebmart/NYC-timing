@@ -2,8 +2,8 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "quad"
-MAX_ROUNDS = 1
+MODEL = "avg"
+MAX_ROUNDS = 5
 MIN_RIDES = 3
 RADIUS = 140
 TIMES = "1214"
@@ -33,6 +33,7 @@ function new_LP(
 	roads = edges(graph)
 	nodes = vertices(graph)
 	out = [copy(out_neighbors(graph,i)) for i in nodes]
+	inn = [copy(in_neighbors(graph,i)) for i in nodes]
 
 	TMAX = 3600
 	TESTDIR = "new_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)"
@@ -51,27 +52,38 @@ function new_LP(
 	println("-- Saving outputs to directory Outputs/$(TESTDIR)/")
 	outputFile = open("Outputs/$TESTDIR/algorithm_output.csv", "w")
 
-	# Create JuMP model
+	# Create JuMP model for LP and QP
 	println("**** Creating LP instance ****")
-	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2))
+	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, InfUnbdInfo=1, Crossover=0))
+	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, InfUnbdInfo=1, Crossover=0))
 
 	# Add one variable for each road
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
+	@defVar(m2, t2[i=nodes,j=out[i]] >= roadTimes[i,j])
 
 	# Add regularization variables
 	pairs = [find(travel_times[i,:]) for i=nodes]
 	@defVar(m, epsilon[i=nodes,j=pairs[i]] >= 0)
 
-	# Define objective function
+	# Define objective variables and constraints for m2
+	@defVar(m2, delta[i=nodes,j=out[i]] >= 0)
+	@addConstraint(m2, objConstrLower[i=nodes,j=out[i]], -1 * t2[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
+	@addConstraint(m2, objConstrUpper[i=nodes,j=out[i]], t2[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
+
+	# Define objective function for programs
 	@setObjective(m, Min, sum{ epsilon[i,j]/sqrt(travel_times[i,j]), i=nodes, j=pairs[i]})
+	@setObjective(m2, Min, sum{delta[i,j], i=nodes, j=out[i]})
 
 	# Create handles for all constraints
 	numConstraints = sum([length(pairs[i]) for i=nodes])
 	@defConstrRef lower[1:numConstraints,1:max_rounds]
 	@defConstrRef higher[1:numConstraints,1:max_rounds]
+	@defConstrRef lower2[1:numConstraints,1:max_rounds]
+	@defConstrRef higher2[1:numConstraints,1:max_rounds]
 
 	status = 0
 	newTimes = roadTimes
+	epsilonValues = zeros(length(nodes), length(nodes))
 
 	# Compute shortest paths (with turn cost)
 	println("**** Computing shortest paths ****")
@@ -107,10 +119,8 @@ function new_LP(
 		for i=1:numConstraints
 			higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] + epsilon[paths[i][1],paths[i][end]] >= lowerBounds[i])
 			lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - epsilon[paths[i][1],paths[i][end]] <= lowerBounds[i])
-		end
-		if l > 1
-			for i=1:numConstraints
-				chgConstrRHS(lower[i, l-1], TMAX)
+			if l > 1
+				chgConstrRHS(lower[i,l-1], TMAX)
 			end
 		end
 		toc()
@@ -119,14 +129,39 @@ function new_LP(
 		println("**** Solving LP ****")
 		status = solve(m)
 
+		println("**** Setting up second LP ****")
+		# Get epsilon values
+		epsilonResult = getValue(epsilon)
+		for element in epsilonResult
+			epsilonValues[element[1], element[2]] = element[3]
+		end
+
+		println("**** Adding constraints ****")
+		# Set up second LP, add constraints
+		for i=1:numConstraints
+			higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - lowerBounds[i] >= -1 * epsilonValues[paths[i][1],paths[i][end]])
+			lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] <= lowerBounds[i] + epsilonValues[paths[i][1],paths[i][end]])
+			if l > 1
+				chgConstrRHS(lower2[i,l-1], TMAX)
+				value = -1 * epsilonValues[paths[i][1],paths[i][end]]
+				for j = 1:(l-1)
+					chgConstrRHS(higher2[i,j], value)
+				end
+			end
+		end
+
+		println("**** Solving second LP ****")
+		# Solve second LP
+		status = solve(m2)
+
 		# Debug if infeasible
 		if status == :Infeasible
 			buildInternalModel(m)
 			print_iis_gurobi(m)
 			break
 		# Prepare output
-		elseif status == :Optimal
-			st = getValue(t)
+		elseif status == :Optimal || status == :Suboptimal
+			st = getValue(t2)
 			newTimes = spzeros(length(nodes), length(nodes))
 			for element in st
 				newTimes[element[1], element[2]] = element[3]
@@ -141,41 +176,9 @@ function new_LP(
 			println("**** Computing shortest paths ****")
 			@time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, newTimes, manhattan.positions, turn_cost=turnCost)
 			@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
-		else
-			epsilonValues = zeros(length(nodes), length(nodes))
-			epsilonResult = getValue(epsilon)
-			for element in epsilonResult
-				epsilonValues[element[1], element[2]] = element[3]
-			end
 		end
 		l += 1
 	end
-
-	# Enter second phase of LP, set new objective
-	println("#### FINAL ROUND ####")
-	if model_type == "lin"
-		@setObjective(m, Min, sum{ t[i,j]/distances[i,j], i=nodes, j=out[i]})
-	else
-		@setObjective(m, Min, sum{ t[i,j] * t[i,j]/(distances[i,j] * distances[i,j]), i=nodes, j=out[i] })
-	end
-
-	# Reset solver
-	setSolver(m, GurobiSolver(TimeLimit=1000))
-
-	# Make sure epsilon are no longer decision variables
-	@addConstraint(m, e[i=nodes, j=pairs[i]], epsilon[i,j] == epsilonValues[i,j])
-
-	# Solve
-	solve(m)
-
-	# Get final edge times and save
-	st = getValue(t)
-	newTimes = spzeros(length(nodes), length(nodes))
-	for element in st
-		newTimes[element[1], element[2]] = element[3]
-	end
-	saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$(l+1)")
-
 	close(outputFile)
 	return status, newTimes
 end

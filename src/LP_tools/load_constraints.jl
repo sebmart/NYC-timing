@@ -97,7 +97,7 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	return travelTimes
 end
 
-function loadTrainingTravelTimeData(;radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
+function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
 	"""
 	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
 	"""
@@ -105,20 +105,24 @@ function loadTrainingTravelTimeData(;radius::Int=40, times::String="1214", num_n
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
 	if preprocess
-		dataFile = "../Travel_times/training_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
+		dataFile = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
 	else
-		dataFile = "../Travel_times/training_r$(radius)_wd_$(times).csv"
+		dataFile = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).csv"
 	end
 	println("-- Loading from $dataFile...")
-	data = readTable(dataFile)
+	data = readcsv(dataFile)
+	nodePairs = data[:,1]
+	average = data[:,2]
+	minRides = data[:,5]
 	travelTimes = zeros(num_nodes,num_nodes)
 	numRides = zeros(Int, (num_nodes, num_nodes))
-	for i = 1:nrow(data)
-		src = data[i, :node1]
-		dst = data[i, :node2]
+	for (i, element) in enumerate(nodePairs)
+		node = split(element, ";")
+		src = int(node[1]) + 1
+		dest = int(node[2]) + 1
 		if src != dst && !(src in highwayNodes) && !(dst in highwayNodes)
-			travelTimes[src, dst] = data[i, :averageTime]
-			numRides[src, dst] = data[i, :numberOfRides]
+			travelTimes[src, dst] = average[i]
+			numRides[src, dst] = minRides[i]
 		end
 	end
 	return travelTimes, numRides

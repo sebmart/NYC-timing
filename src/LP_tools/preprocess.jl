@@ -2,13 +2,26 @@
 # Runs clustering algorithms to harmonize set of constraints over New York City
 # Authored on 6/22/15 by Brandon Zeng
 
-function outputPreprocessedConstraints(manhattan::Manhattan;radius::Int=40, numClusters::Int64=50, minRides::Int64=4, sampleSize::Int64=5000, overwrite::Bool=false)
+function outputPreprocessedConstraints(manhattan::Manhattan;radius::Int=40, numClusters::Int64=50, minRides::Int64=4, sampleSize::Int64=5000, overwrite::Bool=false, times::String = "1214")
 	"""
 	Checks if particular preprocessed file already exists. If so, does nothing. Otherwise, generates it.
 	"""
-	if overwrite || !isfile("../Travel_times/travel_times_r$(radius)_wd_1214_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
+	if overwrite || !isfile("../Travel_times/travel_times_r$(radius)_wd_$(times)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
 		println("**** Selecting travel times ****")
-		inputName = "../Travel_times/travel_times_r$(radius)_wd_1214"
+		inputName = "../Travel_times/travel_times_r$(radius)_wd_$(times)"
+		preprocess(inputName, numClusters, minRides, sampleSize, manhattan)
+	else
+		println("**** Selected travel times found ****")
+	end
+end
+
+function outputPreprocessedConstraints(manhattan::Manhattan, trainOrTest::String; radius::Int=40, numClusters::Int64=50, minRides::Int64=4, sampleSize::Int64=5000, overwrite::Bool=false, times::String="1214")
+	"""
+	Checks if particular preprocessed file already exists. If so, does nothing. Otherwise, generates it.
+	"""
+	if overwrite || !isfile("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv")
+		println("**** Selecting travel times ****")
+		inputName = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times)"
 		preprocess(inputName, numClusters, minRides, sampleSize, manhattan)
 	else
 		println("**** Selected travel times found ****")
