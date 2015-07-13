@@ -112,7 +112,7 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 	println("-- Loading from $dataFile...")
 	data = readcsv(dataFile)
 	nodePairs = data[:,1]
-	average = data[:,2]
+	averageTime = data[:,2]
 	minRides = data[:,5]
 	travelTimes = zeros(num_nodes,num_nodes)
 	numRides = zeros(Int, (num_nodes, num_nodes))
@@ -120,9 +120,9 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 		node = split(element, ";")
 		src = int(node[1]) + 1
 		dest = int(node[2]) + 1
-		if src != dst && !(src in highwayNodes) && !(dst in highwayNodes)
-			travelTimes[src, dst] = average[i]
-			numRides[src, dst] = minRides[i]
+		if src != dest && !(src in highwayNodes) && !(dest in highwayNodes) && averageTime[i] >= 60
+			travelTimes[src, dest] = averageTime[i]
+			numRides[src, dest] = minRides[i]
 		end
 	end
 	return travelTimes, numRides

@@ -1,4 +1,5 @@
 *.csv
+*.jld
 *.txt
 .DS_Store
 src/Cities/

@@ -27,7 +27,7 @@ function loadTrainingResults(directoryName::String, max_iterations::Int, manhatt
 	"""
 	Given the name of the directory where the algorithm output was saved, run shortest paths to determine travel times between all pairs of nodes.
 	"""
-	println("-- Loading results from $directoryName...")
+	println("-- Loading results from $(directoryName)...")
 	link_times = load("Outputs/$(directoryName)/manhattan-times-$(max_iterations).jld", "times")
 	println("-- Computing shortest paths...")
 	new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(manhattan.network, link_times, manhattan.positions, turn_cost=turnCost)
@@ -36,7 +36,8 @@ function loadTrainingResults(directoryName::String, max_iterations::Int, manhatt
 	return new_sp.traveltime
 end
 
-manhattan = loadCityGraph()
-trainingData = loadTrainingResults("",5,manhattan,10.0)
-testingData = loadNewTravelTimeData(trainOrTest="testing", radius = 140, times = "1214", preprocess = false)
-compute_error(testingData, trainingData)
+# manhattan = loadCityGraph()
+# NAME = "new_r140_minr3_i5_wd_1214_avg_clust50_rides50000"
+# trainingData = loadTrainingResults(NAME, 2, manhattan, 10.0)
+# testingData, numRides = loadNewTravelTimeData(trainOrTest="testing", radius = 140, times = "1214", preprocess = false)
+# compute_error(testingData, trainingData)

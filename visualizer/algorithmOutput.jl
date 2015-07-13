@@ -10,8 +10,8 @@ include("../src/LP_tools/manhattan.jl")
 
 include("manhattanVisualization.jl")
 
-DIRECTORY = "new_r140_minr3_i1_wd_1214_quad_clust50_rides50000/"
-MAX_ROUNDS = 1
+DIRECTORY = "new_r140_minr1_i5_wd_1214_avgtr_clust50_rides50000"
+MAX_ROUNDS = 5
 
 function showAlgorithmResults(dir=DIRECTORY, rounds=1:MAX_ROUNDS)
 	man = load("../src/Cities/Saved/full_manhattan.jld","pb")

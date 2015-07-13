@@ -48,7 +48,7 @@ end
 # Dijkstra algorithm
 
 function custom_dijkstra(
-    g::AbstractGraph,
+    g::SimpleGraph,
     src::Int,
     edge_dists::AbstractArray{Float64, 2},
     edge_costs::AbstractArray{Float64, 2})

@@ -196,7 +196,7 @@ end
 end
 
 @everywhere function custom_dijkstra_par(
-    g::AbstractGraph,
+    g::SimpleGraph,
     src::Int,
     edge_dists::AbstractArray{Float64, 2},
     edge_costs::AbstractArray{Float64, 2})
@@ -254,8 +254,8 @@ end
 end
 
 @everywhere function custom_dijkstra_with_turn_cost(
-    g::AbstractGraph,
-    newGraph::AbstractGraph,
+    g::SimpleGraph,
+    newGraph::SimpleGraph,
     src::Int,
     new_edge_dists::AbstractArray{Float64, 2},
     new_nodes::Array{Array{Int}})
@@ -326,7 +326,7 @@ end
 end
 
 @everywhere function modifyGraphForDijkstra(
-    g::AbstractGraph,
+    g::SimpleGraph,
     edge_dists::AbstractArray{Float64, 2},
     coords::Array{Coordinates, 1};
     turn_cost::Float64 = 10.0)

@@ -72,7 +72,7 @@ function drawManhattan(man::Manhattan)
 			endNode = dst(edge)
 			s = Vector2f(nc[startNode].x, nc[startNode].y)
 			e = Vector2f(nc[endNode].x, nc[endNode].y)
-			road = Line(s, e, 1)
+			road = Line(s, e, 2)
 
 			score = m.distances[src(edge), dst(edge)] / m.roadTime[src(edge), dst(edge)]
 			difscore = max - min
@@ -102,7 +102,7 @@ function drawManhattan(man::Manhattan)
 
 	# set minscore and maxscore
 	minscore = 0/3.6
-	maxscore = 30/3.6
+	maxscore = 50/3.6
 	roads = generateRoads(man, nodeCoordinates, minscore, maxscore)
 
 	# Creates the window for the visualization
@@ -186,7 +186,7 @@ function drawManhattan(man::Manhattan)
 			draw(window, roads[i])
 		end
 		for i = 1:length(nodes)
-			draw(window, nodes[i])
+			# draw(window, nodes[i])
 		end
 
 		display(window)

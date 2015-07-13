@@ -2,9 +2,9 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "avg"
+MODEL = "avgtr"
 MAX_ROUNDS = 5
-MIN_RIDES = 3
+MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
 
@@ -16,7 +16,8 @@ TURN_COST = 10.
 
 function new_LP(
 	manhattan::Manhattan,
-	travelTimes::Array{Float64,2};
+	travelTimes::Array{Float64,2},
+	numRides::Array{Int,2};
 	model_type::String=MODEL,
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
@@ -54,8 +55,8 @@ function new_LP(
 
 	# Create JuMP model for LP and QP
 	println("**** Creating LP instance ****")
-	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, InfUnbdInfo=1, Crossover=0))
-	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, InfUnbdInfo=1, Crossover=0))
+	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=0))
+	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=0, BarHomogeneous=1, InfUnbdInfo=1))
 
 	# Add one variable for each road
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
@@ -69,9 +70,9 @@ function new_LP(
 	@defVar(m2, delta[i=nodes,j=out[i]] >= 0)
 	@addConstraint(m2, objConstrLower[i=nodes,j=out[i]], -1 * t2[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
 	@addConstraint(m2, objConstrUpper[i=nodes,j=out[i]], t2[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
-
+	
 	# Define objective function for programs
-	@setObjective(m, Min, sum{ epsilon[i,j]/sqrt(travel_times[i,j]), i=nodes, j=pairs[i]})
+	@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travel_times[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]})
 	@setObjective(m2, Min, sum{delta[i,j], i=nodes, j=out[i]})
 
 	# Create handles for all constraints
@@ -83,13 +84,29 @@ function new_LP(
 
 	status = 0
 	newTimes = roadTimes
-	epsilonValues = zeros(length(nodes), length(nodes))
 
 	# Compute shortest paths (with turn cost)
 	println("**** Computing shortest paths ****")
 	@time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, newTimes, manhattan.positions, turn_cost=turnCost)
 	old_nodes = getInverseMapping(new_nodes, nv(new_graph))
 	@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
+
+	# Run over all pairs of nodes that have data
+	lowerBounds = Float64[]	
+	srcs = Int[]
+	dsts = Int[]
+	sizehint(srcs, sample_size)
+	sizehint(dsts, sample_size)
+	sizehint(lowerBounds, sample_size)
+	for i in nodes, j in nodes
+		if travelTimes[i,j] > 0
+			# Load info to reconstruct shortest paths in parallel
+			push!(srcs, i)
+			push!(dsts, j)
+			push!(lowerBounds, travelTimes[i,j])
+		end
+	end
+	totalNumExpensiveTurns = Array(Int, (numConstraints, max_rounds))
 
 	l = 1
 	while l <= max_rounds
@@ -98,27 +115,11 @@ function new_LP(
 		# Add path constraints
 		println("**** Adding constraints ****")
 		tic()
-		# Run over all pairs of nodes that have data
-		paths = Array{Float64}[]
-		lowerBounds = Float64[]
-		numExpensiveTurns = Int[]
-		srcs = Int[]
-		dsts = Int[]
-		sizehint(srcs, sample_size)
-		sizehint(dsts, sample_size)
-		sizehint(lowerBounds, sample_size)
-		for i in nodes, j in nodes
-			if travelTimes[i,j] > 0
-				# Load info to reconstruct shortest paths in parallel
-				push!(srcs, i)
-				push!(dsts, j)
-				push!(lowerBounds, travelTimes[i,j])
-			end
-		end
 		paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurnsParallel(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, newTimes, new_edge_dists)
+		totalNumExpensiveTurns[:,l] = numExpensiveTurns
 		for i=1:numConstraints
-			higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] + epsilon[paths[i][1],paths[i][end]] >= lowerBounds[i])
-			lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - epsilon[paths[i][1],paths[i][end]] <= lowerBounds[i])
+			higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[paths[i][1],paths[i][end]] >= lowerBounds[i] - turnCost * numExpensiveTurns[i])
+			lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[paths[i][1],paths[i][end]] <= lowerBounds[i] - turnCost * numExpensiveTurns[i])
 			if l > 1
 				chgConstrRHS(lower[i,l-1], TMAX)
 			end
@@ -132,22 +133,24 @@ function new_LP(
 		println("**** Setting up second LP ****")
 		# Get epsilon values
 		epsilonResult = getValue(epsilon)
+		epsilonValues = zeros(length(nodes), length(nodes))
 		for element in epsilonResult
 			epsilonValues[element[1], element[2]] = element[3]
 		end
 
 		println("**** Adding constraints ****")
 		# Set up second LP, add constraints
-		for i=1:numConstraints
-			higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] - lowerBounds[i] >= -1 * epsilonValues[paths[i][1],paths[i][end]])
-			lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + turnCost * numExpensiveTurns[i] <= lowerBounds[i] + epsilonValues[paths[i][1],paths[i][end]])
+		@time for i=1:numConstraints
+			higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} >= lowerBounds[i] - epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+			lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} <= lowerBounds[i] + epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
 			if l > 1
 				chgConstrRHS(lower2[i,l-1], TMAX)
-				value = -1 * epsilonValues[paths[i][1],paths[i][end]]
 				for j = 1:(l-1)
+					value = lowerBounds[i] - epsilonValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,j]
 					chgConstrRHS(higher2[i,j], value)
 				end
 			end
+		
 		end
 
 		println("**** Solving second LP ****")
@@ -156,8 +159,9 @@ function new_LP(
 
 		# Debug if infeasible
 		if status == :Infeasible
-			buildInternalModel(m)
-			print_iis_gurobi(m)
+			println("!!!! Diagnosis pending !!!!")
+			buildInternalModel(m2)
+			print_iis_gurobi(m2)
 			break
 		# Prepare output
 		elseif status == :Optimal || status == :Suboptimal
@@ -185,7 +189,7 @@ end
 
 manhattan = loadCityGraph()
 if PREPROCESS
-	@time outputPreprocessedConstraints(manhattan, radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false)
+	@time outputPreprocessedConstraints(manhattan, "training", radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false, times="0709")
 end
-travel_times = loadTravelTimeData(radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
-@time status, new_times = new_LP(manhattan, travel_times)
+travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times="0709", min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
+@time status, new_times = new_LP(manhattan, travel_times, num_rides)

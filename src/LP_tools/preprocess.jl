@@ -49,10 +49,26 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	# Read in rides
 	println("---- Reading CSV ----")
-	data = readtable("$(inputName).csv")
+	rides = readcsv("$(inputName).csv")
+
+	nodes = rides[:,1]		
+	average = rides[:,2]		
+	stddev = rides[:,3]		
+	stderr = rides[:,4]		
+	numRides = rides[:,5]		
+		
+	function extractNodes(nodePair::SubString{ASCIIString})		
+		source = parse(Int, split(nodePair, ";")[1]) + 1		
+		dest = parse(Int, split(nodePair, ";")[2]) + 1		
+		return source, dest		
+	end
 
 	function classify(source::Int, dest::Int, clusterAssignments::Vector{Int64})
 		return (clusterAssignments[source], clusterAssignments[dest])
+	end
+
+	function flightDistance(source::Int, dest::Int)
+		return norm([man.positions[source].x - man.positions[dest].x, man.positions[source].y - man.positions[dest].y])
 	end
 
 	givenRides = Dict{Tuple{Int64,Int64}, Vector{Int}}()
@@ -60,17 +76,16 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	println("---- Loading rides ----")
 	# Load rides into memory
-	for i = 1:nrow(data)
+	for i = 1:length(nodes)
 		if i % 10000 == 0
 			@printf("                                \r")
 			@printf("Progress: %.1f%% completed\r", 100*i/length(nodes))
 		end
 		# Check that there are enough rides and that the time is not ridiculously small
-		if data[i, :numberOfRides] >= minRides
-			src = data[i, :node1]
-			dest = data[i, :node2]
+		if numRides[i] >= minRides && average[i] >= 60
+			src, dest = extractNodes(nodes[i])
 			# Check that we are not starting or ending on a highway (makes no sense)
-			if !(src in highwayNodes) && !(dest in highwayNodes) && src != dest
+			if !(src in highwayNodes) && !(dest in highwayNodes) && src != dest && flightDistance(src, dest) >= 300
 				clusterPair = classify(src, dest, R.assignments)
 				if haskey(givenRides, clusterPair)
 					push!(givenRides[clusterPair], i)
@@ -112,5 +127,5 @@ function preprocess(inputName::String, numClusters::Int64, minRides::Int64, samp
 
 	# Sort the ride ids thus obtained so that we can quickly extract them
 	sort!(result)
-	writetable("$(inputName)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv", data[result,:])
+	writecsv("$(inputName)_clust$(numClusters)_rides$(sampleSize)_minr$(minRides).csv", rides[result,:])
 end

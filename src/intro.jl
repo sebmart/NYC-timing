@@ -17,3 +17,4 @@ using Clustering
 include("LP_tools/LP_tools.jl")
 include("LP_tools/preprocess.jl")
 include("LP_tools/load_constraints.jl")
+include("LP_tools/runTest.jl")
