@@ -7,7 +7,7 @@ MEAN_VELOCITIES = [0.03,0.15,0.3]
 OUTSIDE_NODES = [(1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(2,8),(3,8),(4,8),(5,8),(6,8),(7,8),(8,8),(8,7),(8,6),(8,5),(8,4),(8,3),(8,2),(8,1),(7,1),(6,1),(5,1),(4,1),(3,1),(2,1),(1,1)]
 WIDTH = 8
 NSUB = 8
-TURN_COST = 0.0
+TURN_COST = 2.0
 
 using TaxiSimulation
 using Distributions
@@ -157,7 +157,7 @@ end
 
 function generate_rides(prob = 0.7)
 	graph, positions, distances = load_metropolis_graph(from_scratch=false)
-	traveltime, minRoadTime, meanRoadTime = define_travel_times(from_scratch=false)
+	traveltime, minRoadTime, meanRoadTime = define_travel_times(from_scratch=true)
 
 	out = [copy(TaxiSimulation.out_neighbors(graph, i)) for i = TaxiSimulation.vertices(graph)]
 	out2 = [vcat([copy(TaxiSimulation.out_neighbors(graph, j)) for j in out[i]]) for i = TaxiSimulation.vertices(graph)]

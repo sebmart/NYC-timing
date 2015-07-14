@@ -389,7 +389,7 @@ end
         # Add extra edge weight appropriately
         # Make sure not to add weight if the node has only one incoming edge and one outgoing edge
         angle = getAngleEdges(coords[src].x, coords[src].y, coords[i].x, coords[i].y, coords[dst].x, coords[dst].y)
-        if -7*pi/8 < angle < 3*pi/8 || length(inn[i]) == 1
+        if -7*pi/8 < angle < pi/4 || length(inn[i]) == 1
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst]
         else
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst] + turn_cost
@@ -499,9 +499,11 @@ end
     k = real_dsts[dst]
     # Initialize path in modified graph (only keep last vertex)
     previousActualPathNode = k
-    sizehint(pathNodes, 200)
+    sizehint(pathNodes, 100)
     # Look for path in previous matrix
+    l = 0
     while old_nodes[k] != src
+        l += 1
         k = previous[k]
         # Check if edge was modified (i.e. by presence of left turn)
         if new_edge_dists[k, previousActualPathNode] - old_edge_dists[old_nodes[k], pathNodes[end]] > 1e-7

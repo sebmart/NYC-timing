@@ -2,12 +2,12 @@
 # New LP formulation for travel time estimation - test for metropolis
 # Authored by Arthur J Delarue on 7/9/15
 
-PROB = 0.99
+PROB = 0.7
 MODEL = "metropolis_$(PROB)"
 MAX_ROUNDS = 50
 MIN_RIDES = 1
 
-TURN_COST = 0.0
+TURN_COST = 2.0
 
 function new_LP(
 	graph::SimpleGraph,
@@ -20,6 +20,9 @@ function new_LP(
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
 	turnCost::Float64=TURN_COST)
+	"""
+	Runs our iterative LP formulation on a Metropolis object
+	"""
 
 	roads = edges(graph)
 	nodes = vertices(graph)
@@ -40,7 +43,7 @@ function new_LP(
 	# Create JuMP model for LP and QP
 	println("**** Creating LP instance ****")
 	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=0))
-	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=0, BarHomogeneous=1, OutputFlag=1))
+	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=0, BarHomogeneous=1,OutputFlag=1))
 
 	# Add one variable for each road
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
@@ -49,22 +52,30 @@ function new_LP(
 	# Add regularization variables
 	pairs = [find(travel_times[i,:]) for i=nodes]
 	@defVar(m, epsilon[i=nodes,j=pairs[i]] >= 0)
+	if split(model_type, "_")[end] == "strict"
+		@defVar(m, T[i=nodes, j=pairs[i]])
+		@addConstraint(m, TLowerBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] >= - epsilon[i,j])
+		@addConstraint(m, TUpperBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] <= epsilon[i,j])
+	end
 
 	# Define objective variables and constraints for m2
-	@defVar(m2, delta[i=nodes,j=out[i]] >= 0)
-	@addConstraint(m2, objConstrLower[i=nodes,j=out[i]], -1 * t2[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
-	@addConstraint(m2, objConstrUpper[i=nodes,j=out[i]], t2[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta[i,j])
+	@defVar(m2, delta2[i=nodes,j=out[i]] >= 0)
+	@addConstraint(m2, objConstrLower[i=nodes,j=out[i]], -1 * t2[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta2[i,j])
+	@addConstraint(m2, objConstrUpper[i=nodes,j=out[i]], t2[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta2[i,j])
 	
 	# Define objective function for programs
 	@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travel_times[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]})
-	@setObjective(m2, Min, sum{delta[i,j], i=nodes, j=out[i]})
+	@setObjective(m2, Min, sum{delta2[i,j], i=nodes, j=out[i]})
 
 	# Create handles for all constraints
 	numConstraints = sum([length(pairs[i]) for i=nodes])
-	@defConstrRef lower[1:numConstraints,1:max_rounds]
-	@defConstrRef higher[1:numConstraints,1:max_rounds]
-	@defConstrRef lower2[1:numConstraints,1:max_rounds]
-	@defConstrRef higher2[1:numConstraints,1:max_rounds]
+	@defConstrRef lower[1:numConstraints, 1:max_rounds]
+	@defConstrRef higher[1:numConstraints, 1:max_rounds]
+	@defConstrRef lower2[1:numConstraints, 1:max_rounds]
+	@defConstrRef higher2[1:numConstraints, 1:max_rounds]
+	# Create arrays to keep track of constraints that are already in the set of constraints
+	hashedPathList = fill(copy(Uint64[]), numConstraints)
+	pathListToIteration = fill(copy(Int[]), numConstraints, max_rounds))
 
 	status = 0
 	newTimes = roadTimes
@@ -82,19 +93,18 @@ function new_LP(
 	dsts = Int[]
 	sizehint(srcs, 12000)
 	sizehint(dsts, 12000)
-	sizehint(lowerBounds, 12000)
 	for i in nodes, j in nodes
 		if travelTimes[i,j] > 0
 			# Load info to reconstruct shortest paths in parallel
 			push!(srcs, i)
 			push!(dsts, j)
-			push!(lowerBounds, travelTimes[i,j])
 		end
 	end
 	totalNumExpensiveTurns = Array(Int, (numConstraints, max_rounds))
 
 	l = 1
 	while l <= max_rounds
+		actual_l = l
 		# setSolver(m, GurobiSolver(TimeLimit=10000, Method=2))
 		println("###### ROUND $l ######")
 		# Add path constraints
@@ -103,8 +113,13 @@ function new_LP(
 		paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurnsParallel(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, newTimes, new_edge_dists)
 		totalNumExpensiveTurns[:,l] = numExpensiveTurns
 		for i=1:numConstraints
-			higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[paths[i][1],paths[i][end]] >= lowerBounds[i] - turnCost * numExpensiveTurns[i])
-			lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[paths[i][1],paths[i][end]] <= lowerBounds[i] - turnCost * numExpensiveTurns[i])
+			if split(model_type, "_")[end] == "strict"
+				higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
+				lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] <= - turnCost * numExpensiveTurns[i])
+			else
+				higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[srcs[i],dsts[i]] >= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+				lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[srcs[i],dsts[i]] <= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+			end
 			if l > 1
 				chgConstrRHS(lower[i,l-1], TMAX)
 			end
@@ -116,26 +131,45 @@ function new_LP(
 		status = solve(m)
 
 		println("**** Setting up second LP ****")
-		# Get epsilon values
-		epsilonResult = getValue(epsilon)
-		epsilonValues = zeros(length(nodes), length(nodes))
-		for element in epsilonResult
-			epsilonValues[element[1], element[2]] = element[3]
+		# Get epsilon/delta values
+		if split(model_type, "_")[end] == "strict"
+			result = getValue(T)
+			TValues = zeros(length(nodes), length(nodes))
+			for element in result
+				TValues[element[1], element[2]] = element[3]
+			end
+		else
+			epsilonResult = getValue(epsilon)
+			epsilonValues = zeros(length(nodes), length(nodes))
+			for element in epsilonResult
+				epsilonValues[element[1], element[2]] = 1.001 * element[3]
+			end
 		end
 
 		println("**** Adding constraints ****")
 		# Set up second LP, add constraints
 		@time for i=1:numConstraints
-			higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} >= lowerBounds[i] - 1.001*epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
-			lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} <= lowerBounds[i] + 1.001*epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
-			if l > 1
-				chgConstrRHS(lower2[i,l-1], TMAX)
-				for j = 1:(l-1)
-					value = lowerBounds[i] - 1.001*epsilonValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,j]
-					chgConstrRHS(higher2[i,j], value)
+			if split(model_type, "_")[end] == "strict"
+				higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} >= 0.999*TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+				lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} <= 1.001*TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+				if l > 1
+					chgConstrRHS(lower2[i,l-1], TMAX)
+					for j = 1:(l-1)
+						value = 0.999*TValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,j]
+						chgConstrRHS(higher2[i,j], value)
+					end
+				end
+			else 
+				higher2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} >= travelTimes[srcs[i],dsts[i]] - epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+				lower2[i,l] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} <= travelTimes[srcs[i],dsts[i]] + epsilonValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+				if l > 1
+					chgConstrRHS(lower2[i,l-1], TMAX)
+					for j = 1:(l-1)
+						value = travelTimes[srcs[i],dsts[i]] - epsilonValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,j]
+						chgConstrRHS(higher2[i,j], value)
+					end
 				end
 			end
-		
 		end
 
 		println("**** Solving second LP ****")
@@ -172,11 +206,7 @@ function new_LP(
 			@time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, newTimes, positions, turn_cost=turnCost)
 			@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
 			println("**** Error calculation ****")
-			if l == max_rounds
-				printErrorStatsToFile("Outputs/$TESTDIR/errorstats.txt",real_times,travel_times,new_sp.traveltime,numRides,meanRoadTime,newTimes,num_nodes = nv(graph))
-			else
-				compute_error(real_times,travel_times,new_sp.traveltime, numRides, meanRoadTime, newTimes, num_nodes = nv(graph))
-			end
+			printErrorStatsToFile("Outputs/$TESTDIR/errorstats-$(actual_l).txt", real_times, travel_times, new_sp.traveltime, numRides, meanRoadTime, newTimes, num_nodes = nv(graph))
 		end
 		l += 1
 	end
@@ -185,7 +215,7 @@ end
 
 function compute_error(realData::AbstractArray{Float64, 2}, inputData::AbstractArray{Float64, 2}, algorithmData::AbstractArray{Float64}, numRides::AbstractArray{Int, 2}, realLinkTimes::AbstractArray{Float64,2}, newLinkTimes::AbstractArray{Float64,2}; num_nodes::Int = 192, out=Array{Int}[])
 	"""
-	Given a matrix of TABs from testing Data and calculated by our algorithm, returns some error measures
+	Given a matrix of TABs from real Data, input Data and our algorithm, returns some statistical measures of error
 	"""
 	num_links = 0
 	num_results = 0
@@ -210,7 +240,7 @@ function compute_error(realData::AbstractArray{Float64, 2}, inputData::AbstractA
 			end			
 		end
 		if realLinkTimes[i,j] > 0
-			average_link_relative_error = (num_links * average_link_relative_error + abs(realLinkTimes[i,j]-newLinkTimes[i,j])/realLinkTimes[i,j])/(num_links + 1)
+			average_link_relative_error = (num_links * average_link_relative_error + abs(newLinkTimes[i,j]-realLinkTimes[i,j])/realLinkTimes[i,j])/(num_links + 1)
 			average_link_bias = (num_links * average_link_bias + newLinkTimes[i,j] - realLinkTimes[i,j])/(num_links + 1)
 			num_links += 1
 		end
@@ -222,23 +252,28 @@ function compute_error(realData::AbstractArray{Float64, 2}, inputData::AbstractA
 	println("Average original relative error on nonzero rides: \t", average_nonzero_input_error)
 	println("Average result relative error on nonzero rides: \t", average_nonzero_result_error)
 	println("Average relative error on link times: \t\t\t", average_link_relative_error)
-	println(average_link_bias)
+	println("Average bias on link times:\t\t\t\t", average_link_bias)
 	println("------------------------------------------------")
-	return average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error
+	return average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error, average_link_bias
 end
 
 function printErrorStatsToFile(fileName::String, realData::AbstractArray{Float64, 2}, inputData::AbstractArray{Float64, 2}, algorithmData::AbstractArray{Float64}, numRides::AbstractArray{Int, 2}, realLinkTimes::AbstractArray{Float64,2}, newLinkTimes::AbstractArray{Float64,2}; num_nodes::Int = 192, out=Array{Int}[])
-	average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error = compute_error(realData, inputData, algorithmData, numRides, realLinkTimes, newLinkTimes, num_nodes=num_nodes, out=out)
+	average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error, average_link_bias = compute_error(realData, inputData, algorithmData, numRides, realLinkTimes, newLinkTimes, num_nodes=num_nodes, out=out)
+	"""
+	Same as compute_error, except prints to file as well
+	"""
 	file = open(fileName, "w")
-	write(file,string("Average squared error: \t\t\t\t\t", average_squared_error))
-	write(file,string("Average relative error: \t\t\t\t", average_relative_error))
-	write(file,string("Average bias: \t\t\t\t\t\t", average_bias))
-	write(file,string("Average original relative error on nonzero rides: \t", average_nonzero_input_error))
-	write(file,string("Average result relative error on nonzero rides: \t", average_nonzero_result_error))
-	write(file,string("Average relative error on link times: \t\t\t", average_link_relative_error))
+	write(file, string("Average squared error: \t\t\t\t\t", average_squared_error, "\n"))
+	write(file, string("Average relative error: \t\t\t\t", average_relative_error, "\n"))
+	write(file, string("Average bias: \t\t\t\t\t\t", average_bias, "\n"))
+	write(file, string("Average original relative error on nonzero rides: \t", average_nonzero_input_error, "\n"))
+	write(file, string("Average result relative error on nonzero rides: \t", average_nonzero_result_error, "\n"))
+	write(file, string("Average relative error on link times: \t\t\t", average_link_relative_error, "\n"))
+	write(file, string("Average bias on link times:\t\t\t\t", average_link_bias, "\n"))
 	close(file)
 end
 
+# This code loads the data and calls the LP
 adjacencyList = load("Inputs/input-graph.jld", "adjList")
 graph = DiGraph(length(adjacencyList))
 for i = 1:nv(graph), j in adjacencyList[i]
@@ -260,4 +295,5 @@ num_rides = load("Inputs/input-numRides-$(PROB).jld", "numRides")
 @time status, new_times = new_LP(graph, travel_times, num_rides, minRoadTime, distances, positions)
 @time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, new_times, positions, turn_cost=TURN_COST)
 @time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
-compute_error(real_times, new_sp.traveltime; num_nodes = nv(graph))
+print("")
+# compute_error(real_times, new_sp.traveltime; num_nodes = nv(graph))
