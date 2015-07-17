@@ -56,6 +56,8 @@ function new_LP(
 		@defVar(m, T[i=nodes, j=pairs[i]])
 		@addConstraint(m, TLowerBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] >= - epsilon[i,j])
 		@addConstraint(m, TUpperBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] <= epsilon[i,j])
+	elseif split(model_type, "_")[end] == "relaxed"
+		@defVar(m, delta[i=nodes, j=pairs[i]] >= 0)
 	end
 
 	# Define objective variables and constraints for m2
@@ -74,8 +76,9 @@ function new_LP(
 	@defConstrRef lower2[1:numConstraints, 1:max_rounds]
 	@defConstrRef higher2[1:numConstraints, 1:max_rounds]
 	# Create arrays to keep track of constraints that are already in the set of constraints
-	hashedPathList = fill(copy(Uint64[]), numConstraints)
-	pathListToIteration = fill(copy(Int[]), numConstraints, max_rounds))
+	hashedPathIndices = fill((Uint64 => Int64)[], numConstraints)
+	hashedPaths = fill(Set(Uint64[]), numConstraints)
+	previousPaths = [0 for i = 1:numConstraints]
 
 	status = 0
 	newTimes = roadTimes
@@ -113,15 +116,54 @@ function new_LP(
 		paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurnsParallel(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, newTimes, new_edge_dists)
 		totalNumExpensiveTurns[:,l] = numExpensiveTurns
 		for i=1:numConstraints
-			if split(model_type, "_")[end] == "strict"
-				higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
-				lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] <= - turnCost * numExpensiveTurns[i])
-			else
-				higher[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[srcs[i],dsts[i]] >= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
-				lower[i,l] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[srcs[i],dsts[i]] <= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+			if previousPaths[i] != 0
+				chgConstrRHS(lower[i,previousPaths[i]], TMAX)
 			end
-			if l > 1
-				chgConstrRHS(lower[i,l-1], TMAX)
+			if split(model_type, "_")[end] == "strict"
+				# If path is already in model
+				if hash(paths[i]) in hashedPaths[i]
+					# Choose this path to be the good one
+					index = hashedPathIndices[i][hash(paths[i])]
+					chgConstrRHS(lower[i,index], - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = index
+				# If this is the first path for this pair of nodes
+				elseif length(hashedPaths[i]) == 0
+					hashedPaths[i] = Set([hash(paths[i])])
+					hashedPathIndices[i] = [hash(paths[i]) => 1]
+					higher[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
+					lower[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] <= - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = 1
+				# If this is a new path but not the first one
+				else
+					push!(hashedPaths[i], hash(paths[i]))
+					len = length(hashedPaths[i])
+					hashedPathIndices[i][hash(paths[i])] = len
+					higher[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
+					lower[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] <= - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = len
+				end
+			else
+				# If path already in model
+				if hash(paths[i]) in hashedPaths[i]
+					index = hashedPathIndices[i][hash(paths[i])]
+					chgConstrRHS(lower[i,index], travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = index
+				# If first path
+				elseif length(hashedPaths[i]) == 0
+					hashedPaths[i] = Set([hash(paths[i])])
+					hashedPathIndices[i] = [hash(paths[i]) => 1]
+					higher[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[srcs[i],dsts[i]] >= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+					lower[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[srcs[i],dsts[i]] <= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = 1
+				# If new path
+				else
+					push!(hashedPaths[i], hash(paths[i]))
+					len = length(hashedPaths[i])
+					hashedPathIndices[i][hash(paths[i])] = len
+					higher[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} + epsilon[srcs[i],dsts[i]] >= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+					lower[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - epsilon[srcs[i],dsts[i]] <= travelTimes[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
+					previousPaths[i] = len
+				end
 			end
 		end
 		toc()
@@ -292,8 +334,18 @@ end
 travel_times = load("Inputs/input-travelTimes-$(PROB).jld", "travelTimes")
 num_rides = load("Inputs/input-numRides-$(PROB).jld", "numRides")
 
+function compute_cost_function(realData::AbstractArray{Float64,2}, inputData::AbstractArray{Float64,2}, numRides::AbstractArray{Int,2}; num_nodes = 192)
+	cost = 0
+	for i = 1:num_nodes, j=1:num_nodes
+		if numRides[i,j] > 0
+			cost += abs(realData[i,j] - inputData[i,j]) * sqrt(numRides[i,j]/inputData[i,j])
+		end
+	end
+	return cost
+end
+
 @time status, new_times = new_LP(graph, travel_times, num_rides, minRoadTime, distances, positions)
 @time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, new_times, positions, turn_cost=TURN_COST)
 @time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
 print("")
-# compute_error(real_times, new_sp.traveltime; num_nodes = nv(graph))
+compute_cost_function(real_times, travel_times, num_rides, num_nodes = nv(graph))
