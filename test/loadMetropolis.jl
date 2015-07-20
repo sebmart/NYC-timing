@@ -157,7 +157,7 @@ end
 
 function generate_rides(prob = 0.7)
 	graph, positions, distances = load_metropolis_graph(from_scratch=false)
-	traveltime, minRoadTime, meanRoadTime = define_travel_times(from_scratch=true)
+	traveltime, minRoadTime, meanRoadTime = define_travel_times(from_scratch=false)
 
 	out = [copy(TaxiSimulation.out_neighbors(graph, i)) for i = TaxiSimulation.vertices(graph)]
 	out2 = [vcat([copy(TaxiSimulation.out_neighbors(graph, j)) for j in out[i]]) for i = TaxiSimulation.vertices(graph)]
