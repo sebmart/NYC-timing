@@ -38,6 +38,46 @@ function print_iis_gurobi(m::Model)
     println("End of IIS")
 end
 
+function print_iis_gurobi(m::Model, im::Gurobi.GurobiMathProgModel)
+    """
+    Taken from JuMP examples online. Given a LP instance, uses Gurobi to troubleshoot infeasibility.
+    Outputs IIS to find "bad" constraints.
+    """
+    grb = MathProgBase.getrawsolver(im)
+    Gurobi.computeIIS(grb)
+    numconstr = Gurobi.num_constrs(grb)
+    numvar = Gurobi.num_vars(grb)
+
+    iisconstr = Gurobi.get_intattrarray(grb, "IISConstr", 1, numconstr)
+    iislb = Gurobi.get_intattrarray(grb, "IISLB", 1, numvar)
+    iisub = Gurobi.get_intattrarray(grb, "IISUB", 1, numvar)
+
+    println("Irreducible Inconsistent Subsystem (IIS)")
+    println("Variable bounds:")
+    lowerBounds = MathProgBase.getvarLB(im)
+    upperBounds = MathProgBase.getvarUB(im)
+    for i in 1:numvar
+        v = Variable(m, i)
+        if iislb[i] != 0 && iisub[i] != 0
+            println(lowerBounds[i], " <= ", getName(v), " <= ", upperBounds[i])
+        elseif iislb[i] != 0
+            println(getName(v), " >= ", lowerBounds[i])
+        elseif iisub[i] != 0
+            println(getName(v), " <= ", upperBounds[i])
+        end
+    end
+
+    cLowerBounds = MathProgBase.getconstrLB(im)
+    cUpperBounds = MathProgBase.getconstrUB(im)
+    println("Constraints:")
+    for i in 1:numconstr
+        if iisconstr[i] != 0
+            println(cLowerBounds[i], " <= ", split(string(m.linconstr[i])," = ")[1], " <= ", cUpperBounds[i])
+        end
+    end
+    println("End of IIS")
+end
+
 function parallelShortestPaths(n::Network, roadTime::SparseMatrixCSC{Float64, Int},roadCost::SparseMatrixCSC{Float64, Int})
 	"""
 	Computes all-pairs shortest paths in a network by distributing jobs evenly over avilable cores. Not fastest implementation because jobs are divided into as many pieces as there are CPUs, and each CPU ends up with a large chunk of jobs, so the time is limited by the slowest processor.
