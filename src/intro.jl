@@ -2,7 +2,7 @@
 # Script to be included before running anything in Julia
 # Authored by Arthur J Delarue on 6/9/15
 
-using HDF5, JLD
+using JLD
 using Clustering
 @everywhere using DataFrames
 @everywhere using LightGraphs
