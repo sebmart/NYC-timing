@@ -3,14 +3,14 @@
 # Authored by Arthur J Delarue on 7/9/15
 
 PROB = 0.7
-MODEL = "metropolis_$(PROB)_relaxed"
-MAX_ROUNDS = 55
+MODEL = "metropolis_$(PROB)_strict"
+MAX_ROUNDS = 15   #DON'T CHOOSE 30
 MIN_RIDES = 1
 
 TURN_COST = 2.0
 
 LAMBDA = [1e3]#[1e9,1e3,2e3,5e3,1e4,2e4,5e4,1e5,2e5,5e5,1e6,2e6,5e6,1e25]
-EPSILON_BOUND = [10,5,3,2]
+DELTA_BOUND = [0.6,0.5,0.4]
 
 function new_LP(
 	graph::SimpleGraph,
@@ -22,7 +22,8 @@ function new_LP(
 	model_type::String=MODEL,
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
-	turnCost::Float64=TURN_COST)
+	turnCost::Float64=TURN_COST,
+	delta_bound::Array{Float64}=DELTA_BOUND)
 	"""
 	Runs our iterative LP formulation on a Metropolis object
 	"""
@@ -52,21 +53,12 @@ function new_LP(
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
 	@defVar(m2, t2[i=nodes,j=out[i]] >= roadTimes[i,j])
 
-	# Add regularization variables
+	# Add decision variables for first LP
 	pairs = [find(travel_times[i,:]) for i=nodes]
 	@defVar(m, epsilon[i=nodes,j=pairs[i]] >= 0)
 	@defVar(m, T[i=nodes, j=pairs[i]] >= 0)
 	@addConstraint(m, TLowerBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] >= - epsilon[i,j])
 	@addConstraint(m, TUpperBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] <= epsilon[i,j])
-	if split(model_type, "_")[end] == "relaxed"
-		@defVar(m, delta[i=nodes, j=pairs[i]] >= 0)
-		@addConstraint(m, convergenceBound[i=nodes, j=pairs[i]], delta[i,j] <= 0)
-	elseif split(model_type, "_")[end] == "strict"
-		# do nothing
-	else
-		println("!!!! Invalid model type !!!!")
-		pause(2)
-	end
 
 	# Define objective variables and constraints for m2
 	@defVar(m2, delta2[i=nodes,j=out[i]] >= 0)
@@ -79,11 +71,9 @@ function new_LP(
 
 	# Create handles for all constraints
 	numDataPoints = sum([length(pairs[i]) for i=nodes])
-	if split(model_type, "_")[end] == "relaxed"
-		@defConstrRef pathRelaxed[1:numDataPoints, 1:max_rounds]
-	end
 	@defConstrRef path[1:numDataPoints, 1:max_rounds]
 	@defConstrRef path2[1:numDataPoints, 1:max_rounds]
+
 	# Create arrays to keep track of constraints that are already in the set of constraints
 	# Map from hashed paths to constraint indices
 	hashedPathIndices = fill((Uint64 => Int64)[], numDataPoints)
@@ -123,36 +113,24 @@ function new_LP(
 	while l <= max_rounds
 		actual_l = l
 		if split(model_type, "_")[end] == "relaxed"
-			for i = nodes, j=pairs[i]
-				chgConstrRHS(convergenceBound[i,j], (1/10)^(div(actual_l-1,length(EPSILON_BOUND)))*EPSILON_BOUND[((actual_l-1)%length(EPSILON_BOUND)) + 1])
-			end
-			if true || actual_l <= length(LAMBDA)
-				@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i] })
-			else
-				@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} + LAMBDA[end] * sum{delta[i,j]/travelTimes[i,j], i=nodes, j=pairs[i]})
+			delta = (1/2)^(div(actual_l-1,length(delta_bound)))*delta_bound[((actual_l-1)%length(delta_bound)) + 1]
+			# Avoid numerical issues
+			if delta < 1e-4
+				delta = 0
 			end
 		end
 		# setSolver(m, GurobiSolver(TimeLimit=10000, Method=2))
 		println("###### ROUND $l ######")
 
 		# Create upper and lower bound arrays for MathProgBase manual constraint management
-		if split(model_type, "_")[end] == "strict"
-			pathLowerBounds = zeros(totalPathConstraints + 2 * numDataPoints)
-			pathUpperBounds = zeros(totalPathConstraints + 2 * numDataPoints)
-		else
-			pathLowerBounds = zeros(2 * totalPathConstraints + 3 * numDataPoints)
-			pathUpperBounds = zeros(2 * totalPathConstraints + 3 * numDataPoints)
-		end
+		pathLowerBounds = zeros(totalPathConstraints + 2 * numDataPoints)
+		pathUpperBounds = zeros(totalPathConstraints + 2 * numDataPoints)
 		# Fill in upper and lower bounds for non-path constraints
 		for i = 1:numDataPoints
 			pathLowerBounds[i] = travelTimes[srcs[i],dsts[i]]
 			pathLowerBounds[numDataPoints + i] = -Inf
 			pathUpperBounds[i] = Inf
 			pathUpperBounds[numDataPoints + i] = travelTimes[srcs[i],dsts[i]]
-			if split(model_type, "_")[end] == "relaxed"
-				pathLowerBounds[2 * numDataPoints + i] = -Inf
-				pathUpperBounds[2 * numDataPoints + i] = (1/10)^(div(actual_l-1,length(EPSILON_BOUND)))*EPSILON_BOUND[((actual_l-1)%length(EPSILON_BOUND)) + 1]
-			end
 		end
 
 		# Add path constraints
@@ -165,9 +143,7 @@ function new_LP(
 				for hashedPath in hashedPaths[i]
 					index = hashedPathIndices[i][hashedPath]
 					if split(model_type, "_")[end] == "relaxed"
-						pathLowerBounds[path[i,index].idx] = - TMAX
-						pathLowerBounds[pathRelaxed[i,index].idx] = - turnCost * totalNumExpensiveTurns[i, index]
-						pathUpperBounds[pathRelaxed[i,index].idx] = Inf
+						pathLowerBounds[path[i,index].idx] = - turnCost * totalNumExpensiveTurns[i,index] - delta * travelTimes[srcs[i],dsts[i]]
 					elseif split(model_type, "_")[end] == "strict"
 						pathLowerBounds[path[i,index].idx] = - turnCost * totalNumExpensiveTurns[i,index]
 					end
@@ -187,11 +163,6 @@ function new_LP(
 				path[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] == - turnCost * numExpensiveTurns[i])
 				push!(pathLowerBounds, - turnCost * numExpensiveTurns[i])
 				push!(pathUpperBounds, - turnCost * numExpensiveTurns[i])
-				if split(model_type, "_")[end] == "relaxed"
-					pathRelaxed[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] + delta[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
-					push!(pathLowerBounds, - turnCost * numExpensiveTurns[i])
-					push!(pathUpperBounds, Inf)
-				end
 				totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
 				totalPathConstraints += 1
 			# If this is a new path but not the first one
@@ -202,11 +173,6 @@ function new_LP(
 				path[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] == - turnCost * numExpensiveTurns[i])
 				push!(pathLowerBounds, - turnCost * numExpensiveTurns[i])
 				push!(pathUpperBounds, - turnCost * numExpensiveTurns[i])
-				if split(model_type, "_")[end] == "relaxed"
-					pathRelaxed[i,len] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] + delta[srcs[i],dsts[i]] >= - turnCost * numExpensiveTurns[i])
-					push!(pathLowerBounds, - turnCost * numExpensiveTurns[i])
-					push!(pathUpperBounds, Inf)
-				end
 				totalNumExpensiveTurns[i,len] = numExpensiveTurns[i]
 				totalPathConstraints += 1
 			end
@@ -231,11 +197,28 @@ function new_LP(
 			TValues[i, j] = result[T[i,j].col]
 		end
 		if split(model_type, "_")[end] == "relaxed"	
+			# Find delta values from how much constraints were actually violated
 			deltaValues = zeros(length(nodes), length(nodes))
-			for i = nodes, j = pairs[i]
-				deltaValues[i, j] = result[delta[i,j].col]
+			deltaPercentage = zeros(length(nodes), length(nodes))
+			# Get values of vector Ax
+			constraintValues = MathProgBase.getconstrsolution(im)
+			for i = 1:numDataPoints
+				difference = 0.0
+				# Look at all paths (except equality)
+				for hashedPath in hashedPaths[i]
+					if hashedPath != hash(paths[i])
+						# Find value of violation. deltaValue is maximum violation
+						index = hashedPathIndices[i][hashedPath]
+						newDiff = - constraintValues[path[i,index].idx] - totalNumExpensiveTurns[i,index] * turnCost
+						if newDiff > difference
+							difference = newDiff
+						end
+					end
+				end
+				deltaValues[srcs[i], dsts[i]] = difference
+				deltaPercentage[srcs[i], dsts[i]] = difference/travelTimes[srcs[i],dsts[i]]
 			end
-			println(maximum(deltaValues))
+			println("Max delta value: ", maximum(deltaPercentage))
 		end
 
 		# Create upper and lower bound arrays for MathProgBase manual constraint management
@@ -282,8 +265,8 @@ function new_LP(
 			end
 		end
 
-		println("**** Solving second LP ****")
 		# Solve second LP
+		println("**** Solving second LP ****")
 		buildInternalModel(m2)
 		im2 = getInternalModel(m2)
 		MathProgBase.setconstrLB!(im2, pathLowerBounds2)
@@ -294,15 +277,17 @@ function new_LP(
 
 		# Debug if infeasible
 		if status == :Infeasible
-			println("!!!! Diagnosis pending !!!!")
+			println("!!!!!!!!!!!!!!!!!!!!!!!")
+			println("!!!! Computing IIS !!!!")
+			println("!!!!!!!!!!!!!!!!!!!!!!!")
 			print_iis_gurobi(m2, im2)
 			break
 		# Prepare output
 		elseif status == :Optimal || status == :Suboptimal
-			st = MathProgBase.getsolution(im2)
+			result2 = MathProgBase.getsolution(im2)
 			newTimes = spzeros(length(nodes), length(nodes))
 			for i = nodes, j=out[i]
-				newTimes[i, j] = st[t2[i,j].col]
+				newTimes[i, j] = result2[t2[i,j].col]
 			end
 			# Save updated Manhattan road times to file
 			saveRoadTimes(newTimes, "$TESTDIR/metropolis-times-$l")

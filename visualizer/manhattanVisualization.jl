@@ -49,7 +49,7 @@ function drawManhattan(man::Manhattan)
 		return nodes
 	end
 
-	nodes = generateNodes(0.5, nodeCoordinates)
+	nodes = generateNodes(0.05, nodeCoordinates)
 
 	minscore = Inf; maxscore = -Inf
 	for edge in edges(man.network)
@@ -72,9 +72,10 @@ function drawManhattan(man::Manhattan)
 			endNode = dst(edge)
 			s = Vector2f(nc[startNode].x, nc[startNode].y)
 			e = Vector2f(nc[endNode].x, nc[endNode].y)
-			road = Line(s, e, 2)
+			road = Line(s, e, 1)
 
-			score = m.distances[src(edge), dst(edge)] / m.roadTime[src(edge), dst(edge)]
+			# score = m.distances[src(edge), dst(edge)] / m.roadTime[src(edge), dst(edge)]
+			score = m.roadTime[src(edge), dst(edge)]
 			difscore = max - min
 			avg = (max + min)/2
 			if score < min
@@ -91,18 +92,20 @@ function drawManhattan(man::Manhattan)
 				b = 0.0
 			else
 				r = 0.0
-				g = 128.0
+				g = 0.#128.0
 				b = 0.0
 			end
 			set_fillcolor(road, SFML.Color(floor(Int, r), floor(Int, g), floor(Int,b)))
-			push!(roads, road)
+			if score < max
+				push!(roads, road)
+			end
 		end
 		return roads
 	end
 
 	# set minscore and maxscore
-	minscore = 0/3.6
-	maxscore = 50/3.6
+	minscore = 0.07#0/3.6
+	maxscore = 1.#50/3.6
 	roads = generateRoads(man, nodeCoordinates, minscore, maxscore)
 
 	# Creates the window for the visualization
@@ -186,7 +189,7 @@ function drawManhattan(man::Manhattan)
 			draw(window, roads[i])
 		end
 		for i = 1:length(nodes)
-			# draw(window, nodes[i])
+			draw(window, nodes[i])
 		end
 
 		display(window)
