@@ -97,17 +97,24 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	return travelTimes
 end
 
-function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4)
+function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4, saveTestingMatrix::Bool=false, loadTestingMatrixDirectly=false)
 	"""
 	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
 	"""
-	println("**** Loading travel time data ****")
+	println("**** Loading $(trainOrTest) data ****")
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
 	if preprocess
 		dataFile = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times)_clust$(num_clusters)_rides$(sampleSize)_minr$(min_rides).csv"
 	else
 		dataFile = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).csv"
+	end
+	# Special case: load testing matrix directly
+	if trainOrTest == "testing" && loadTestingMatrixDirectly
+		println("-- Loading directly from JLD archive")
+		travelTimes = load("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "travelTimes")
+		numRides = load("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "numRides")
+		return travelTimes, numRides
 	end
 	println("-- Loading from $dataFile...")
 	data = readcsv(dataFile)
@@ -124,6 +131,10 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 			travelTimes[src, dest] = averageTime[i]
 			numRides[src, dest] = minRides[i]
 		end
+	end
+	if trainOrTest == "testing" && saveTestingMatrix
+		println("-- Saving to JLD file for speed")
+		save("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "travelTimes", travelTimes, "numRides", numRides)
 	end
 	return travelTimes, numRides
 end
