@@ -2,9 +2,16 @@
 # New LP formulation for travel time estimation - test for metropolis
 # Authored by Arthur J Delarue on 7/9/15
 
-PROB = 0.7
+VARMAP = {
+	:Basic => 0,
+	:Superbasic => -3,
+	:NonbasicAtUpper => -2,
+	:NonbasicAtLower => -1
+}
+
+PROB = 0.9
 MODEL = "metropolis_$(PROB)_strict"
-MAX_ROUNDS = 15   #DON'T CHOOSE 30
+MAX_ROUNDS = 5   #DON'T CHOOSE 30
 MIN_RIDES = 1
 
 TURN_COST = 2.0
@@ -109,6 +116,10 @@ function new_LP(
 	end
 	totalNumExpensiveTurns = Array(Int, (numDataPoints, max_rounds))
 
+	# Create warmstart array for LP2
+	startingValues = zeros(2 * length(roads))
+	startingBasis = zeros(Int, 2 * length(roads))
+
 	l = 1
 	while l <= max_rounds
 		actual_l = l
@@ -188,10 +199,16 @@ function new_LP(
 		MathProgBase.updatemodel!(im)
 		MathProgBase.optimize!(im)
 		status = MathProgBase.status(im)
+		(cbasis, rbasis) = MathProgBase.getbasis(im)
 
 		println("**** Setting up second LP ****")
 		# Get delta values
 		result = MathProgBase.getsolution(im)
+		for i = nodes, j = out[i]
+			startingValues[t2[i,j].col] = result[t[i,j].col]
+			startingValues[delta2[i,j].col] = NaN
+			startingBasis[t2[i,j].col] = VARMAP[cbasis[t[i,j].col]]
+		end
 		TValues = zeros(length(nodes), length(nodes))
 		for i = nodes, j = pairs[i]
 			TValues[i, j] = result[T[i,j].col]
@@ -269,10 +286,14 @@ function new_LP(
 		println("**** Solving second LP ****")
 		buildInternalModel(m2)
 		im2 = getInternalModel(m2)
+		MathProgBase.setwarmstart!(im2, startingValues)
 		MathProgBase.setconstrLB!(im2, pathLowerBounds2)
 		MathProgBase.setconstrUB!(im2, pathUpperBounds2)
 		MathProgBase.updatemodel!(im2)
 		MathProgBase.optimize!(im2)
+		for i = 641:1280
+			println(MathProgBase.getbasis(im2)[1][i], MathProgBase.getsolution(im2)[i])
+		end
 		status = MathProgBase.status(im2)
 
 		# Debug if infeasible
