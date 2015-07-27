@@ -3,14 +3,14 @@
 # Authored by Arthur J Delarue on 7/2/15
 
 MODEL = "relaxed"
-MAX_ROUNDS = 10
+MAX_ROUNDS = 20
 MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
 
 PREPROCESS = true
 NUM_CLUSTERS = 50
-SAMPLE_SIZE = 5000
+SAMPLE_SIZE = 50000
 
 TURN_COST = 10.
 
@@ -146,7 +146,7 @@ function new_LP(
 		if model_type == "relaxed"
 			delta = (1/2)^(div(actual_l-1,length(delta_bound)))*delta_bound[((actual_l-1)%length(delta_bound)) + 1]
 			# Avoid numerical issues
-			if delta < 1e-4
+			if delta < 1e-4 || l == max_rounds
 				delta = 0
 			end
 		end
