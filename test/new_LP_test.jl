@@ -9,9 +9,9 @@ VARMAP = {
 	:NonbasicAtLower => -1
 }
 
-PROB = 0.9
+PROB = 0.7
 MODEL = "metropolis_$(PROB)_strict"
-MAX_ROUNDS = 5   #DON'T CHOOSE 30
+MAX_ROUNDS = 5   #DON'T CHOOSE 30 or 55
 MIN_RIDES = 1
 
 TURN_COST = 2.0
@@ -54,11 +54,10 @@ function new_LP(
 	# Create JuMP model for LP and QP
 	println("**** Creating LP instance ****")
 	m = Model(solver=GurobiSolver(TimeLimit=10000, Method=2, Crossover=1, OutputFlag=1))
-	m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=1, OutputFlag=1, InfUnbdInfo=1))
+	# m2 = Model(solver=GurobiSolver(TimeLimit=10000, Method=1, OutputFlag=1, InfUnbdInfo=1))
 
 	# Add one variable for each road
 	@defVar(m, t[i=nodes,j=out[i]] >= roadTimes[i,j])
-	@defVar(m2, t2[i=nodes,j=out[i]] >= roadTimes[i,j])
 
 	# Add decision variables for first LP
 	pairs = [find(travel_times[i,:]) for i=nodes]
@@ -68,18 +67,13 @@ function new_LP(
 	@addConstraint(m, TUpperBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] <= epsilon[i,j])
 
 	# Define objective variables and constraints for m2
-	@defVar(m2, delta2[i=nodes,j=out[i]] >= 0)
-	@addConstraint(m2, objConstrLower[i=nodes,j=out[i]], -1 * t2[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta2[i,j])
-	@addConstraint(m2, objConstrUpper[i=nodes,j=out[i]], t2[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t2[j,k], k = out[j]} + sum{1/distances[h,i] * t2[h,i], h=inn[i]}) <= delta2[i,j])
-
-	# Define objective function for programs
-	@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travel_times[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]})
-	@setObjective(m2, Min, sum{delta2[i,j], i=nodes, j=out[i]})
+	@defVar(m, delta2[i=nodes,j=out[i]] >= 0)
+	@addConstraint(m, objConstrLower[i=nodes,j=out[i]], -1 * t[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
+	@addConstraint(m, objConstrUpper[i=nodes,j=out[i]], t[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
 
 	# Create handles for all constraints
 	numDataPoints = sum([length(pairs[i]) for i=nodes])
 	@defConstrRef path[1:numDataPoints, 1:max_rounds]
-	@defConstrRef path2[1:numDataPoints, 1:max_rounds]
 
 	# Create arrays to keep track of constraints that are already in the set of constraints
 	# Map from hashed paths to constraint indices
@@ -88,8 +82,6 @@ function new_LP(
 	hashedPaths = fill(Set(Uint64[]), numDataPoints)
 	# Keep track of last path
 	previousPaths = [0 for i = 1:numDataPoints]
-	# Same for second LP
-	hashedPaths2 = fill(Set(Uint64[]), numDataPoints)
 
 	status = 0
 	newTimes = roadTimes
@@ -116,9 +108,9 @@ function new_LP(
 	end
 	totalNumExpensiveTurns = Array(Int, (numDataPoints, max_rounds))
 
-	# Create warmstart array for LP2
-	startingValues = zeros(2 * length(roads))
-	startingBasis = zeros(Int, 2 * length(roads))
+	# Create variable bound arrays for MathProgBase manual updating
+	variableLowerBounds = zeros(2 * numDataPoints + 2 * length(roads))
+	variableUpperBounds = zeros(2 * numDataPoints + 2 * length(roads))
 
 	l = 1
 	while l <= max_rounds
@@ -130,18 +122,39 @@ function new_LP(
 				delta = 0
 			end
 		end
-		# setSolver(m, GurobiSolver(TimeLimit=10000, Method=2))
+		setSolver(m, GurobiSolver(TimeLimit=10000, Method=2, Crossover=1))
+		@setObjective(m, Min, sum{ sqrt(numRides[i,j]/travel_times[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]})
+
 		println("###### ROUND $l ######")
 
 		# Create upper and lower bound arrays for MathProgBase manual constraint management
-		pathLowerBounds = zeros(totalPathConstraints + 2 * numDataPoints)
-		pathUpperBounds = zeros(totalPathConstraints + 2 * numDataPoints)
+		pathLowerBounds = zeros(totalPathConstraints + 2 * numDataPoints + 2 * length(roads))
+		pathUpperBounds = zeros(totalPathConstraints + 2 * numDataPoints + 2 * length(roads))
+
 		# Fill in upper and lower bounds for non-path constraints
 		for i = 1:numDataPoints
 			pathLowerBounds[i] = travelTimes[srcs[i],dsts[i]]
 			pathLowerBounds[numDataPoints + i] = -Inf
 			pathUpperBounds[i] = Inf
 			pathUpperBounds[numDataPoints + i] = travelTimes[srcs[i],dsts[i]]
+		end
+		for i = 1:2*length(roads)
+			pathLowerBounds[2 * numDataPoints + i] = -Inf
+			pathUpperBounds[2 * numDataPoints + i] = 0.0
+		end
+
+		# Fill in variable bounds for first LP
+		for i = nodes, j = pairs[i]
+			variableLowerBounds[T[i,j].col] = 0.0
+			variableUpperBounds[T[i,j].col] = Inf
+			variableLowerBounds[epsilon[i,j].col] = 0.0
+			variableUpperBounds[epsilon[i,j].col] = Inf
+		end
+		for i = nodes, j = out[i]
+			variableLowerBounds[t[i,j].col] = roadTimes[i,j]
+			variableUpperBounds[t[i,j].col] = Inf
+			variableLowerBounds[delta2[i,j].col] = 0.0
+			variableUpperBounds[delta2[i,j].col] = Inf
 		end
 
 		# Add path constraints
@@ -194,24 +207,28 @@ function new_LP(
 		println("**** Solving LP ****")
 		buildInternalModel(m)
 		im = getInternalModel(m)
+		MathProgBase.setvarLB!(im, variableLowerBounds)
+		MathProgBase.setvarUB!(im, variableUpperBounds)
 		MathProgBase.setconstrLB!(im, pathLowerBounds)
 		MathProgBase.setconstrUB!(im, pathUpperBounds)
 		MathProgBase.updatemodel!(im)
 		MathProgBase.optimize!(im)
 		status = MathProgBase.status(im)
-		(cbasis, rbasis) = MathProgBase.getbasis(im)
+		if status == :Infeasible
+			print_iis_gurobi(m, im)
+			break
+		end
 
 		println("**** Setting up second LP ****")
+		setSolver(m, GurobiSolver(TimeLimit=10000, Method=1))
+		@setObjective(m, Min, sum{delta2[i,j], i=nodes, j=out[i]})
+
 		# Get delta values
 		result = MathProgBase.getsolution(im)
-		for i = nodes, j = out[i]
-			startingValues[t2[i,j].col] = result[t[i,j].col]
-			startingValues[delta2[i,j].col] = NaN
-			startingBasis[t2[i,j].col] = VARMAP[cbasis[t[i,j].col]]
-		end
 		TValues = zeros(length(nodes), length(nodes))
 		for i = nodes, j = pairs[i]
-			TValues[i, j] = result[T[i,j].col]
+			variableLowerBounds[T[i,j].col] = result[T[i,j].col]
+			variableUpperBounds[T[i,j].col] = result[T[i,j].col]
 		end
 		if split(model_type, "_")[end] == "relaxed"	
 			# Find delta values from how much constraints were actually violated
@@ -238,85 +255,65 @@ function new_LP(
 			println("Max delta value: ", maximum(deltaPercentage))
 		end
 
-		# Create upper and lower bound arrays for MathProgBase manual constraint management
-		pathLowerBounds2 = zeros(totalPathConstraints + 2 * length(roads))
-		pathUpperBounds2 = zeros(totalPathConstraints + 2 * length(roads))
-		for i = 1:2*length(roads)
-			pathLowerBounds2[i] = -Inf
-			pathUpperBounds2[i] = 0.0
-		end
-
 		println("**** Adding constraints ****")
 		# Set up second LP, add constraints
 		@time for i=1:numDataPoints
 			if previousPaths[i] != 0
-				for hashedPath in hashedPaths2[i]
+				for hashedPath in hashedPaths[i]
 					index = hashedPathIndices[i][hashedPath]
-					if split(model_type, "_")[end] == "relaxed"
-						value = TValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,index] - deltaValues[srcs[i],dsts[i]]
-					else #if split(model_type, "_")[end] == "strict"
-						value = TValues[srcs[i],dsts[i]] - turnCost * totalNumExpensiveTurns[i,index]
+					if hashedPath != hash(paths[i])
+						if split(model_type, "_")[end] == "relaxed"
+							value = - turnCost * totalNumExpensiveTurns[i,index] - deltaValues[srcs[i],dsts[i]]
+						else #if split(model_type, "_")[end] == "strict"
+							value = - turnCost * totalNumExpensiveTurns[i,index]
+						end
+						pathLowerBounds[path[i,index].idx] = value
+						pathUpperBounds[path[i,index].idx] = Inf
+					else
+						pathLowerBounds[path[i,index].idx] = - turnCost * totalNumExpensiveTurns[i,index]
+						pathUpperBounds[path[i,index].idx] = - turnCost * totalNumExpensiveTurns[i,index]
+						previousPaths[i] = hashedPathIndices[i][hash(paths[i])]
 					end
-					pathLowerBounds2[path2[i,index].idx] = value
-					pathUpperBounds2[path2[i,index].idx] = Inf
 				end
-			end
-			if hash(paths[i]) in hashedPaths2[i]
-				index = hashedPathIndices[i][hash(paths[i])]
-				pathLowerBounds2[path2[i,index].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				pathUpperBounds2[path2[i,index].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				previousPaths[i] = index
-			elseif length(hashedPaths2[i]) == 0
-				hashedPaths2[i] = Set([hash(paths[i])])
-				path2[i,1] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} == TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
-				pathLowerBounds2[path2[i,1].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				pathUpperBounds2[path2[i,1].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				previousPaths[i] = 1
 			else
-				push!(hashedPaths2[i], hash(paths[i]))
-				len = length(hashedPaths2[i])
-				path2[i,len] = @addConstraint(m2, sum{t2[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} == TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i])
-				pathLowerBounds2[path2[i,len].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				pathUpperBounds2[path2[i,len].idx] = TValues[srcs[i],dsts[i]] - turnCost * numExpensiveTurns[i]
-				previousPaths[i] = len
+				previousPaths[i] = hashedPathIndices[i][hash(paths[i])]
 			end
 		end
 
 		# Solve second LP
 		println("**** Solving second LP ****")
-		buildInternalModel(m2)
-		im2 = getInternalModel(m2)
-		MathProgBase.setwarmstart!(im2, startingValues)
-		MathProgBase.setconstrLB!(im2, pathLowerBounds2)
-		MathProgBase.setconstrUB!(im2, pathUpperBounds2)
-		MathProgBase.updatemodel!(im2)
-		MathProgBase.optimize!(im2)
-		for i = 641:1280
-			println(MathProgBase.getbasis(im2)[1][i], MathProgBase.getsolution(im2)[i])
-		end
-		status = MathProgBase.status(im2)
+		buildInternalModel(m)
+		im = getInternalModel(m)
+
+		MathProgBase.setvarLB!(im, variableLowerBounds)
+		MathProgBase.setvarUB!(im, variableUpperBounds)
+		MathProgBase.setconstrLB!(im, pathLowerBounds)
+		MathProgBase.setconstrUB!(im, pathUpperBounds)
+		MathProgBase.updatemodel!(im)
+		MathProgBase.optimize!(im)
+		status = MathProgBase.status(im)
 
 		# Debug if infeasible
 		if status == :Infeasible
 			println("!!!!!!!!!!!!!!!!!!!!!!!")
 			println("!!!! Computing IIS !!!!")
 			println("!!!!!!!!!!!!!!!!!!!!!!!")
-			print_iis_gurobi(m2, im2)
+			print_iis_gurobi(m, im)
 			break
 		# Prepare output
 		elseif status == :Optimal || status == :Suboptimal
-			result2 = MathProgBase.getsolution(im2)
+			result2 = MathProgBase.getsolution(im)
 			newTimes = spzeros(length(nodes), length(nodes))
 			for i = nodes, j=out[i]
-				newTimes[i, j] = result2[t2[i,j].col]
+				newTimes[i, j] = result2[t[i,j].col]
 			end
 			# Save updated Manhattan road times to file
 			saveRoadTimes(newTimes, "$TESTDIR/metropolis-times-$l")
-			if abs(getObjectiveValue(m) - objective)/objective < 1e-10
+			if abs(MathProgBase.getobjval(im) - objective)/objective < 1e-10
 				save("Outputs/$TESTDIR/end.jld", "num_iter", l)
 				l = max_rounds
 			else
-				objective = getObjectiveValue(m)
+				objective = MathProgBase.getobjval(im)
 			end
 		elseif status == :UserLimit
 			println("!!!! User time limit exceeded !!!!")
