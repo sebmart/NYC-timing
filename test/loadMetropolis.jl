@@ -4,9 +4,10 @@
 
 MAX_VELOCITIES = [1.,1.,1.]#[0.1,0.3,0.5]
 MEAN_VELOCITIES = [0.03,0.15,0.3]
-OUTSIDE_NODES = [(1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(2,8),(3,8),(4,8),(5,8),(6,8),(7,8),(8,8),(8,7),(8,6),(8,5),(8,4),(8,3),(8,2),(8,1),(7,1),(6,1),(5,1),(4,1),(3,1),(2,1),(1,1)]
-WIDTH = 8
-NSUB = 8
+# OUTSIDE_NODES = [(1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(2,8),(3,8),(4,8),(5,8),(6,8),(7,8),(8,8),(8,7),(8,6),(8,5),(8,4),(8,3),(8,2),(8,1),(7,1),(6,1),(5,1),(4,1),(3,1),(2,1),(1,1)]
+OUTSIDE_NODES = [(1,1),(1,2),(1,3),(2,3),(3,3),(3,2),(3,1),(2,1),(1,1)]
+WIDTH = 3
+NSUB = 3
 TURN_COST = 2.0
 
 using TaxiSimulation
@@ -78,24 +79,24 @@ function load_metropolis_graph(;from_scratch=false)
 		graph = city.network
 		positions = originalNodes
 
-		save("Inputs/input-graph.jld", "adjList", adjacencyList)
-		save("Inputs/input-positions.jld", "coordinates", coordinates)
-		save("Inputs/input-distances.jld", "distances", distances)
+		save("Inputs/input-graph-small.jld", "adjList", adjacencyList)
+		save("Inputs/input-positions-small.jld", "coordinates", coordinates)
+		save("Inputs/input-distances-small.jld", "distances", distances)
 	else
 		# load graph
-		adjacencyList = load("Inputs/input-graph.jld", "adjList")
+		adjacencyList = load("Inputs/input-graph-small.jld", "adjList")
 		graph = TaxiSimulation.DiGraph(length(adjacencyList))
 		for i = 1:TaxiSimulation.nv(graph), j in adjacencyList[i]
 			TaxiSimulation.add_edge!(graph, i, j)
 		end
 		# load coordinates
-		coordinates = load("Inputs/input-positions.jld", "coordinates")
+		coordinates = load("Inputs/input-positions-small.jld", "coordinates")
 		positions = TaxiSimulation.Coordinates[]
 		for i = 1:TaxiSimulation.nv(graph)
 			push!(positions, TaxiSimulation.Coordinates(coordinates[i,1], coordinates[i,2]))
 		end
 		# load distances
-		distances = load("Inputs/input-distances.jld", "distances")
+		distances = load("Inputs/input-distances-small.jld", "distances")
 	end
 	return graph, positions, distances
 end
@@ -132,7 +133,7 @@ function define_travel_times(;from_scratch = false, turn_cost::Float64 = TURN_CO
 			meanRoadTime[node2,node1] = distances[node2,node1]/gen_speed(3)
 		end
 		# Set slow roads between suburbs and city
-		for k = 1:8
+		for k = 1:NSUB
 			suburbNode = coordToLoc(1,1,k,WIDTH,NSUB)
 			cityNode = minimum(TaxiSimulation.out_neighbors(graph, suburbNode))
 			minRoadTime[suburbNode, cityNode] = distances[suburbNode, cityNode]/MAX_VELOCITIES[1]
@@ -144,13 +145,13 @@ function define_travel_times(;from_scratch = false, turn_cost::Float64 = TURN_CO
 		cityPaths = realPaths(graph, meanRoadTime, meanRoadTime, positions, turn_cost, turn_cost)
 		traveltime = cityPaths.traveltime
 
-		save("Inputs/input-realTimes.jld", "realTimes", cityPaths.traveltime)
-		save("Inputs/input-speedLimits.jld", "speedLimits", minRoadTime)
-		save("Inputs/input-meanTimes.jld", "meanTimes", meanRoadTime)
+		save("Inputs/input-realTimes-small.jld", "realTimes", cityPaths.traveltime)
+		save("Inputs/input-speedLimits-small.jld", "speedLimits", minRoadTime)
+		save("Inputs/input-meanTimes-small.jld", "meanTimes", meanRoadTime)
 	else
-		traveltime = load("Inputs/input-realTimes.jld", "realTimes")
-		minRoadTime = load("Inputs/input-speedLimits.jld", "speedLimits")
-		meanRoadTime = load("Inputs/input-meanTimes.jld", "meanTimes")
+		traveltime = load("Inputs/input-realTimes-small.jld", "realTimes")
+		minRoadTime = load("Inputs/input-speedLimits-small.jld", "speedLimits")
+		meanRoadTime = load("Inputs/input-meanTimes-small.jld", "meanTimes")
 	end
 	return traveltime, minRoadTime, meanRoadTime
 end
@@ -193,8 +194,8 @@ function generate_rides(prob = 0.7)
 		end
 	end
 
-	save("Inputs/input-travelTimes-$(prob).jld", "travelTimes", travelTimes)
-	save("Inputs/input-numRides-$(prob).jld", "numRides", numRides)
+	save("Inputs/input-travelTimes-small-$(prob).jld", "travelTimes", travelTimes)
+	save("Inputs/input-numRides-small-$(prob).jld", "numRides", numRides)
 	return travelTimes, numRides
 end
 

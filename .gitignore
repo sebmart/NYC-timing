@@ -1,6 +1,7 @@
 *.csv
 *.jld
 *.txt
+*.lp
 .DS_Store
 src/Cities/
 src/Outputs/
