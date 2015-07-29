@@ -14,6 +14,7 @@ using Clustering
 @everywhere include("LP_tools/definitions.jl")
 @everywhere include("LP_tools/manhattan.jl")
 @everywhere include("LP_tools/shortestpath.jl")
+include("LP_tools/parallel_tools.jl")
 include("LP_tools/LP_tools.jl")
 include("LP_tools/preprocess.jl")
 include("LP_tools/load_constraints.jl")

@@ -170,7 +170,7 @@ function findWorstPathIndex(paths::Array{Array{Int}}, numExpensiveTurns::Array{I
     """
     pathTime = zeros(length(numExpensiveTurns))
     for i = 1:length(pathTime)
-        pathTime[i] = sum([times[paths[a],paths[a+1]] for a = 1:(length(paths[i])-1)]) + numExpensiveTurns[i] * turnCost
+        pathTime[i] = sum([times[paths[i][a],paths[i][a+1]] for a = 1:(length(paths[i])-1)]) + numExpensiveTurns[i] * turnCost
     end
     return indmax(pathTime)
 end

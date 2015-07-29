@@ -3,7 +3,7 @@
 # Authored by Arthur J Delarue on 7/2/15
 
 MODEL = "relaxed"
-MAX_ROUNDS = 2
+MAX_ROUNDS = 30
 MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
@@ -18,7 +18,7 @@ DELTA_BOUND = [0.06,0.05,0.04]
 
 MAX_NUM_PATHS_PER_OD = 3 # at least 1 please
 
-function new_LP(
+function fast_LP(
 	manhattan::Manhattan,
 	travelTimes::Array{Float64,2},
 	numRides::Array{Int,2},
@@ -49,7 +49,7 @@ function new_LP(
 	numDataPoints = sum([length(pairs[i]) for i=nodes])
 
 	TMAX = 3600
-	TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)"
+	TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_ppc$(maxNumPathsPerOD)"
 	if preprocess
 		TESTDIR=string(TESTDIR, "_clust$(num_clusters)_rides$(sample_size)")
 	end
@@ -158,7 +158,7 @@ function new_LP(
 				end
 			# If we need to remove a path
 			else
-				worstIndex = findWorstPathIndex(totalPaths[i,1:maxNumPathsPerOD], totalNumExpensiveTurns, turnCost, newTimes)
+				worstIndex = findWorstPathIndex(totalPaths[i,1:maxNumPathsPerOD], totalNumExpensiveTurns[i,1:maxNumPathsPerOD], turnCost, newTimes)
 				if worstIndex == 1
 					totalPaths[i,1] = paths[i]
 					totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
@@ -171,9 +171,9 @@ function new_LP(
 			if numPaths[i] > 1
 				for j = 1:(numPaths[i]-1)
 					if model_type == "strict"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,1])
-					elseif model_type = "relaxed"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,1] - delta * travelTimes[srcs[i],dsts[i]])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,j])
+					elseif model_type == "relaxed"
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,j] - delta * travelTimes[srcs[i],dsts[i]])
 					end
 				end
 			end
@@ -193,7 +193,7 @@ function new_LP(
 		objective = getObjectiveValue(m)
 
 		println("**** Setting up second LP ****")
-		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} == objective)
+		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} <= 1.001*objective)
 		@setObjective(m, Min, sum{delta2[i,j], i=nodes, j=out[i]})
 
 		# Solve second LP
@@ -242,4 +242,4 @@ if PREPROCESS
 end
 travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
 testing_data, numRides = loadNewTravelTimeData(trainOrTest="testing", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true);
-@time status, new_times = new_LP(manhattan, travel_times, num_rides, testing_data)
+@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_data)
