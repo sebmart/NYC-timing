@@ -85,7 +85,7 @@ function new_LP(
 
 	status = 0
 	newTimes = roadTimes
-	objective = 0
+	old_objective = 0
 	totalPathConstraints = 0
 
 	# Compute shortest paths (with turn cost)
@@ -219,6 +219,7 @@ function new_LP(
 
 		MathProgBase.optimize!(im)
 		status = MathProgBase.status(im)
+		objective = MathProgBase.getobjval(im)
 		if status == :Infeasible
 			print_iis_gurobi(m, im)
 			break
@@ -314,11 +315,11 @@ function new_LP(
 			end
 			# Save updated Manhattan road times to file
 			saveRoadTimes(newTimes, "$TESTDIR/metropolis-times-$l")
-			if abs(MathProgBase.getobjval(im) - objective)/objective < 1e-10
+			if abs(objective - old_objective)/old_objective < 1e-10
 				save("Outputs/$TESTDIR/end.jld", "num_iter", l)
 				l = max_rounds
 			else
-				objective = MathProgBase.getobjval(im)
+				old_objective = objective
 			end
 		elseif status == :UserLimit
 			println("!!!! User time limit exceeded !!!!")
