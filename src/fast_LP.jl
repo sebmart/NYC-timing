@@ -48,7 +48,6 @@ function fast_LP(
 	pairs = [find(travel_times[i,:]) for i=nodes]
 	numDataPoints = sum([length(pairs[i]) for i=nodes])
 
-	TMAX = 3600
 	TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_ppc$(maxNumPathsPerOD)"
 	if preprocess
 		TESTDIR=string(TESTDIR, "_clust$(num_clusters)_rides$(sample_size)")
@@ -193,7 +192,7 @@ function fast_LP(
 		objective = getObjectiveValue(m)
 
 		println("**** Setting up second LP ****")
-		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} <= 1.001*objective)
+		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} <=objective + 1e-3)
 		@setObjective(m, Min, sum{delta2[i,j], i=nodes, j=out[i]})
 
 		# Solve second LP
