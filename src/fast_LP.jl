@@ -3,7 +3,7 @@
 # Authored by Arthur J Delarue on 7/2/15
 
 MODEL = "relaxed"
-MAX_ROUNDS = 30
+MAX_ROUNDS = 5
 MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
@@ -117,15 +117,6 @@ function fast_LP(
 
 		# Epsilon is the variable used for the absolute value difference between T and \hat{T}
 		@defVar(m, epsilon[i=nodes,j=pairs[i]] >= 0)
-		# T is \hat{T} in the notes
-		@defVar(m, T[i=nodes, j=pairs[i]] >= 0)
-		@addConstraint(m, TLowerBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] >= - epsilon[i,j])
-		@addConstraint(m, TUpperBound[i=nodes,j=pairs[i]], T[i,j] - travelTimes[i,j] <= epsilon[i,j])
-
-		# Define objective variables and constraints for m (second part)
-		@defVar(m, delta2[i=nodes,j=out[i]] >= 0)
-		@addConstraint(m, objConstrLower[i=nodes,j=out[i]], -1 * t[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
-		@addConstraint(m, objConstrUpper[i=nodes,j=out[i]], t[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
 
 		# Create handles for inequality constraints
 		if maxNumPathsPerOD > 1
@@ -170,19 +161,37 @@ function fast_LP(
 			if numPaths[i] > 1
 				for j = 1:(numPaths[i]-1)
 					if model_type == "strict"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,j])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - turnCost * totalNumExpensiveTurns[i,j+1] + turnCost * totalNumExpensiveTurns[i,1])
 					elseif model_type == "relaxed"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j][a],totalPaths[i,j][a+1]], a=1:(length(totalPaths[i,j])-1)} - T[srcs[i],dsts[i]] >= - turnCost * totalNumExpensiveTurns[i,j] - delta * travelTimes[srcs[i],dsts[i]])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - turnCost * totalNumExpensiveTurns[i,j+1] + turnCost * totalNumExpensiveTurns[i,1] - delta * travelTimes[srcs[i],dsts[i]])
 					end
 				end
 			end
 		end
 		# Equality constraints
-		@addConstraint(m, equalityPath[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} - T[srcs[i],dsts[i]] == - turnCost * totalNumExpensiveTurns[i,1])
 		toc()
+
+		# T is \hat{T} in the notes
+		@addConstraint(m, TLowerBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + turnCost * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] >= - epsilon[srcs[i],dsts[i]])
+		@addConstraint(m, TUpperBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + turnCost * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] <= epsilon[srcs[i],dsts[i]])
+
+		# Define objective variables and constraints for m (second part)
+		@defVar(m, delta2[i=nodes,j=out[i]] >= 0)
+		@addConstraint(m, objConstrLower[i=nodes,j=out[i]], -1 * t[i,j]/distances[i,j] + 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
+		@addConstraint(m, objConstrUpper[i=nodes,j=out[i]], t[i,j]/distances[i,j] - 1/(length(inn[i]) + length(out[j])) * (sum{1/distances[j,k] * t[j,k], k = out[j]} + sum{1/distances[h,i] * t[h,i], h=inn[i]}) <= delta2[i,j])
 
 		# Solve LP
 		println("**** Solving LP ****")
+		writeLP(m, "pb.lp")
+		buildInternalModel(m)
+		grb = MathProgBase.getrawsolver(getInternalModel(m))
+		numconstr = Gurobi.num_constrs(grb)
+		rhs = Gurobi.get_dblattrarray(grb, "RHS", 1, numconstr)
+		for i = 1:numconstr
+			if 0 < rhs[i] < 1e-1
+				println(m.linconstr[i])
+			end
+		end
 		status = solve(m)
 		if status == :Infeasible
 			buildInternalModel(m)
@@ -192,7 +201,7 @@ function fast_LP(
 		objective = getObjectiveValue(m)
 
 		println("**** Setting up second LP ****")
-		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} <=objective + 1e-3)
+		@addConstraint(m, fixObjective, sum{sqrt(numRides[i,j]/travelTimes[i,j]) * epsilon[i,j], i=nodes, j=pairs[i]} <=objective + 1e-1)
 		@setObjective(m, Min, sum{delta2[i,j], i=nodes, j=out[i]})
 
 		# Solve second LP
