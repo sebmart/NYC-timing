@@ -138,3 +138,24 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 	end
 	return travelTimes, numRides
 end
+
+function chooseConstraints(travelTimes::Array{Float64, 2}, numRides::Array{Int, 2}; num_nodes::Int = MANHATTAN_NODES, sample_size::Int = 5000)
+	"""
+	Given a matrix of travel times and number of rides, randomly selects sample_size nonzero entries
+	"""
+	newTravelTimes = zeros(num_nodes, num_nodes)
+	newNumRides = zeros(Int, (num_nodes, num_nodes))
+	for i = 1:sample_size
+		while true
+			startNode = rand(1:num_nodes)
+			endNode = rand(1:num_nodes)
+			# Keep them if not added yet
+			if numRides[startNode, endNode] > 0 && newNumRides[startNode, endNode] == 0
+				break
+			end
+		end
+		newNumRides[startNode, endNode] = numRides[startNode, endNode]
+		newTravelTimes[startNode, endNode] = travelTimes[startNode, endNode]
+	end
+	return newTravelTimes, newNumRides
+end

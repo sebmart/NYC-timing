@@ -298,6 +298,7 @@ end
     Given a graph g, modifies it so that left turns are afflicted with the extra cost turn_cost.
     Requires old edge_costs as well as geographic coordinates of nodes (to determine left turns).
     Returns new network, new edge weights, and map from nodes in g to nodes in the new graph as a list of lists.
+    Also returns float array that represents whether an edge is 'expensive' or not
     """
 
     function getAngleToPoint(currentAngle::Float64, currentX::Float64, currentY::Float64, targetX::Float64, targetY::Float64)
@@ -343,6 +344,7 @@ end
         end
     end
     new_edge_dists = spzeros(nv(newGraph), nv(newGraph))
+    new_edge_isExpensive = spzeros(nv(newGraph), nv(newGraph))
     # Now deal with edges
     for i = 1:nvg, j = 1:length(inn[i]), k = 1:length(out[i])
         # Find correct sub-node of i to connect to k
@@ -357,9 +359,10 @@ end
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst]
         else
             new_edge_dists[new_nodes[i][j], new_nodes[dst][l]] = edge_dists[i, dst] + turn_cost
+            new_edge_isExpensive[new_nodes[i][j], new_nodes[dst][l]] = 1.0
         end
     end
-    return newGraph, new_edge_dists, new_nodes
+    return newGraph, new_edge_dists, new_nodes, new_edge_isExpensive
 end
 
 @everywhere function getInverseMapping(new_nodes::Array{Array{Int}}, numNewVertices::Int)
@@ -393,8 +396,7 @@ end
     dsts::Array{Int},
     old_nodes::Array{Int},
     real_dsts::Array{Int},
-    old_edge_dists::AbstractArray{Float64,2},
-    new_edge_dists::AbstractArray{Float64,2};
+    new_edge_isExpensive::AbstractArray{Float64,2};
     batch_size=30000)
     """
     Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
@@ -409,7 +411,7 @@ end
     indices = splitLocations(1:length(srcs), batch_size)
 
     function callReconstruction(orig::Array{Int}, dest::Array{Int})
-        return reconstructMultiplePathsWithExpensiveTurns(previous, orig, dest, old_nodes, real_dsts, old_edge_dists, new_edge_dists)
+        return reconstructMultiplePathsWithExpensiveTurns(previous, orig, dest, old_nodes, real_dsts, new_edge_isExpensive)
     end
 
     # Call pmap on wrapper function
@@ -431,15 +433,14 @@ end
     dsts::Array{Int},
     old_nodes::Array{Int},
     real_dsts::Array{Int,2},
-    old_edge_dists::AbstractArray{Float64,2},
-    new_edge_dists::AbstractArray{Float64,2})
+    new_edge_isExpensive::AbstractArray{Float64,2})
     """
     Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
     """
     expensiveTurns = zeros(Int, length(srcs))
     paths = fill(Int[], length(srcs))
     for i = 1:length(srcs)
-        tmp_path, tmp_expensiveTurns = reconstructPathWithExpensiveTurns(previous[srcs[i],:], srcs[i], dsts[i], old_nodes, real_dsts[srcs[i],:], old_edge_dists, new_edge_dists)
+        tmp_path, tmp_expensiveTurns = reconstructPathWithExpensiveTurns(previous[srcs[i],:], srcs[i], dsts[i], old_nodes, real_dsts[srcs[i],:], new_edge_isExpensive)
         paths[i] = tmp_path
         expensiveTurns[i] = tmp_expensiveTurns
     end
@@ -452,8 +453,7 @@ end
     dst::Int,
     old_nodes::Array{Int},
     real_dsts::Array{Int},
-    old_edge_dists::AbstractArray{Float64,2},
-    new_edge_dists::AbstractArray{Float64,2})
+    new_edge_isExpensive::AbstractArray{Float64,2})
     """
     Given a previous object, a source and a destination, returns the used path in the old graph, and the number of expensive turns (i.e. left turns) along the path.
     """
@@ -470,7 +470,7 @@ end
         l += 1
         k = previous[k]
         # Check if edge was modified (i.e. by presence of left turn)
-        if new_edge_dists[k, previousActualPathNode] - old_edge_dists[old_nodes[k], pathNodes[end]] > 1e-7
+        if bool(int(new_edge_isExpensive[k, previousActualPathNode]))
             expensiveTurns += 1
         end
         # Add node to path
@@ -488,8 +488,7 @@ function reconstructFullPath(
     dst::Int,
     old_nodes::Array{Int},
     real_dsts::Array{Int},
-    old_edge_dists::AbstractArray{Float64,2},
-    new_edge_dists::AbstractArray{Float64,2})
+    new_edge_isExpensive::AbstractArray{Float64,2})
     """
     Return full path as list of (road, time) tuples. 
     """
@@ -505,7 +504,7 @@ function reconstructFullPath(
         # Add edge to path
         push!(path, (Road(old_nodes[k],previousPathNode),old_edge_dists[old_nodes[k], previousPathNode]))
         # Check if edge was modified (i.e. by presence of left turn)
-        if new_edge_dists[k, previousActualPathNode] - old_edge_dists[old_nodes[k], previousPathNode] > 1e-7
+        if bool(int(new_edge_isExpensive[k, previousActualPathNode]))
             push!(path, (Road(old_nodes[k],old_nodes[k]), new_edge_dists[k, previousActualPathNode] - old_edge_dists[old_nodes[k], previousPathNode]))
         end
         # Update previous actual node
