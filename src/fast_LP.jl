@@ -2,18 +2,21 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "relaxed_nothing"
-MAX_ROUNDS = 30
+MODEL = "relaxed_smooth"
+MAX_ROUNDS = 10
 MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
 
 PREPROCESS = true
 NUM_CLUSTERS = 50
-SAMPLE_SIZE = 50000 
+
+SAMPLE_SIZE = 50000
+
+RANDOM_CONSTRAINTS = false
 
 TURN_COST = 10.
-TURN_COST_AS_VARIABLE = true
+TURN_COST_AS_VARIABLE = false
 
 DELTA_BOUND = [0.06, 0.05, 0.04]
 
@@ -42,7 +45,8 @@ function fast_LP(
 	delta_bound::Array{Float64}=DELTA_BOUND,
 	maxNumPathsPerOD::Int=MAX_NUM_PATHS_PER_OD,
 	computeFinalSP::Bool = COMPUTE_FINAL_SHORTEST_PATHS,
-	startWithSimpleLP::Bool=START_SIMPLE)
+	startWithSimpleLP::Bool=START_SIMPLE,
+	randomConstraints::Bool=RANDOM_CONSTRAINTS)
 
 	graph = manhattan.network
 	roadTimes = deepcopy(manhattan.roadTime)
@@ -60,9 +64,13 @@ function fast_LP(
 	TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_ppc$(maxNumPathsPerOD)"
 	if preprocess
 		TESTDIR=string(TESTDIR, "_clust$(num_clusters)_rides$(sample_size)")
+	elseif randomConstraints
+		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
 	end
 	if turnCostAsVariable
 		TESTDIR=string(TESTDIR, "_tcvar")
+	else
+		TESTDIR=string(TESTDIR, "_tc$(turnCost)")
 	end
 	if startWithSimpleLP
 		TESTDIR=string(TESTDIR, "_ss")
@@ -111,7 +119,7 @@ function fast_LP(
 	# Compute shortest paths (with turn cost)
 	if startWithSimpleLP
 		println("**** Finding initial set of paths ****")
-		status, newTimes, turnCost, totalPaths, totalNumExpensiveTurns = simple_LP(manhattan, travelTimes, numRides, testingData, TESTDIR, model_type=split(model_type, "_")[1], max_rounds=max_rounds, turnCost=turnCost, delta_bound=delta_bound, maxNumPathsPerOD=maxNumPathsPerOD, computeFinalSP=false)
+		status, newTimes, turnCost, totalPaths, totalNumExpensiveTurns = simple_LP(manhattan, travelTimes, numRides, testingData, TESTDIR, model_type=split(model_type, "_")[1], max_rounds=max_rounds, turnCost=turnCost, turnCostAsVariable=turnCostAsVariable, delta_bound=delta_bound, maxNumPathsPerOD=maxNumPathsPerOD, computeFinalSP=false)
 	else
 		println("**** Computing shortest paths ****")
 		@time new_graph, new_edge_dists, new_nodes, new_edge_isExpensive = modifyGraphForDijkstra(graph, newTimes, positions, turn_cost=turnCost)
@@ -261,7 +269,9 @@ function fast_LP(
 				@setObjective(m, Min, sum{delta2[i,j], i=nodes, j=out[i]})
 			end
 		elseif split(model_type, "_")[2] == "random"
+			# Need to minimize absolute value (otherwise unbounded) so define new variable
 			@defVar(m, zAbsVal >= 0)
+			# Depending on whether turn cost is a variable, add it (or not) to the objective
 			if turnCostAsVariable
 				@addConstraint(m, randomObjectiveConstraint1, sum{coeffs[i,j] * t[i,j]/distances[i,j], i=nodes, j=out[i]} + coeff_tc * tc <= zAbsVal)
 				@addConstraint(m, randomObjectiveConstraint2, sum{coeffs[i,j] * t[i,j]/distances[i,j], i=nodes, j=out[i]} + coeff_tc * tc >= - zAbsVal)
@@ -274,6 +284,10 @@ function fast_LP(
 
 		if split(model_type, "_")[2] == "nothing"
 			# do nothing
+			if turnCostAsVariable
+				turnCost = getValue(tc)
+				write(turnCostFile, string(l,",", turnCost, "\n"))
+			end
 		else
 			# Solve second LP
 			println("**** Solving second LP ****")
@@ -335,6 +349,11 @@ manhattan = loadCityGraph()
 if PREPROCESS
 	@time outputPreprocessedConstraints(manhattan, "training", radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false, times=TIMES)
 end
-travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
-testing_data, numRides = loadNewTravelTimeData(trainOrTest="testing", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true);
+if RANDOM_CONSTRAINTS
+	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=false, loadTestingMatrixDirectly=true)
+	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
+else
+	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
+end
+testing_data, numRides = loadNewTravelTimeData(trainOrTest="training", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true, saveTestingMatrix = false);
 @time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_data, manhattan.roadTime)

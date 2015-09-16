@@ -11,6 +11,7 @@ function simple_LP(
 	model_type::String="relaxed",
 	max_rounds::Int=5,
 	turnCost::Float64=10.0,
+	turnCostAsVariable::Bool=true,
 	delta_bound::Array{Float64}=[0.06,0.05,0.04],
 	maxNumPathsPerOD::Int=3,
 	computeFinalSP::Bool=false)
@@ -90,7 +91,12 @@ function simple_LP(
 		@defVar(m, t[i=nodes,j=out[i]] >= 0.038 * manhattan.distances[i,j])
 
 		# Add decision variable for turn cost and inverse velocity
-		@defVar(m, tc >= 0)
+		if turnCostAsVariable
+			@defVar(m, tc >= 0)
+		else
+			tc = turnCost
+		end
+
 		@defVar(m, w >= 0)
 		@addConstraint(m, oneVelocity[i=nodes, j=out[i]], t[i,j] == w * distances[i,j])
 
@@ -163,7 +169,9 @@ function simple_LP(
 			break
 		# Prepare output
 		elseif status == :Optimal || status == :Suboptimal
-			turnCost = getValue(tc)
+			if turnCostAsVariable
+				turnCost = getValue(tc)
+			end
 			println(string("Left turn cost (s): ", turnCost))
 			println(string("Average speed (kph): ", 3.6/getValue(w)))
 			write(turnCostFile, string(l,",",turnCost, "\n"))

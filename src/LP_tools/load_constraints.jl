@@ -110,7 +110,7 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 		dataFile = "../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).csv"
 	end
 	# Special case: load testing matrix directly
-	if trainOrTest == "testing" && loadTestingMatrixDirectly
+	if preprocess == false && loadTestingMatrixDirectly == true
 		println("-- Loading directly from JLD archive")
 		travelTimes = load("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "travelTimes")
 		numRides = load("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "numRides")
@@ -132,7 +132,7 @@ function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, 
 			numRides[src, dest] = minRides[i]
 		end
 	end
-	if trainOrTest == "testing" && saveTestingMatrix
+	if preprocess == false && saveTestingMatrix == true
 		println("-- Saving to JLD file for speed")
 		save("../Travel_times/$(trainOrTest)_r$(radius)_wd_$(times).jld", "travelTimes", travelTimes, "numRides", numRides)
 	end
