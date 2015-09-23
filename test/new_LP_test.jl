@@ -2,22 +2,22 @@
 # New LP formulation for travel time estimation - test for metropolis
 # Authored by Arthur J Delarue on 7/9/15
 
-VARMAP = {
-	:Basic => 0,
-	:Superbasic => -3,
-	:NonbasicAtUpper => -2,
-	:NonbasicAtLower => -1
-}
+# VARMAP = {
+# 	:Basic => 0,
+# 	:Superbasic => -3,
+# 	:NonbasicAtUpper => -2,
+# 	:NonbasicAtLower => -1
+# }
 
-PROB = 0.7
-MODEL = "metropolis_$(PROB)_relaxed"
-MAX_ROUNDS = 54   #DON'T CHOOSE 30 or 55
-MIN_RIDES = 1
+# PROB = 0.7
+# MODEL = "metropolis_$(PROB)_relaxed"
+# MAX_ROUNDS = 54   #DON'T CHOOSE 30 or 55
+# MIN_RIDES = 1
 
-TURN_COST = 2.0
+# TURN_COST = 2.0
 
-LAMBDA = [1e3]#[1e9,1e3,2e3,5e3,1e4,2e4,5e4,1e5,2e5,5e5,1e6,2e6,5e6,1e25]
-DELTA_BOUND = [0.6,0.5,0.4]
+# LAMBDA = [1e3]#[1e9,1e3,2e3,5e3,1e4,2e4,5e4,1e5,2e5,5e5,1e6,2e6,5e6,1e25]
+# DELTA_BOUND = [0.6,0.5,0.4]
 
 function new_LP(
 	graph::SimpleGraph,
@@ -397,24 +397,24 @@ function printErrorStatsToFile(fileName::String, realData::AbstractArray{Float64
 	close(file)
 end
 
-# This code loads the data and calls the LP
-adjacencyList = load("Inputs/input-graph.jld", "adjList")
-graph = DiGraph(length(adjacencyList))
-for i = 1:nv(graph), j in adjacencyList[i]
-	add_edge!(graph, i, j)
-end
-real_times = load("Inputs/input-realTimes.jld", "realTimes")
-minRoadTime = load("Inputs/input-speedLimits.jld", "speedLimits")
-meanRoadTime = load("Inputs/input-meanTimes.jld", "meanTimes")
-distances = load("Inputs/input-distances.jld", "distances")
-coordinates = load("Inputs/input-positions.jld", "coordinates")
-positions = Coordinates[]
-for i = 1:nv(graph)
-	push!(positions, Coordinates(coordinates[i,1], coordinates[i,2]))
-end
+# # This code loads the data and calls the LP
+# adjacencyList = load("Inputs/input-graph.jld", "adjList")
+# graph = DiGraph(length(adjacencyList))
+# for i = 1:nv(graph), j in adjacencyList[i]
+# 	add_edge!(graph, i, j)
+# end
+# real_times = load("Inputs/input-realTimes.jld", "realTimes")
+# minRoadTime = load("Inputs/input-speedLimits.jld", "speedLimits")
+# meanRoadTime = load("Inputs/input-meanTimes.jld", "meanTimes")
+# distances = load("Inputs/input-distances.jld", "distances")
+# coordinates = load("Inputs/input-positions.jld", "coordinates")
+# positions = Coordinates[]
+# for i = 1:nv(graph)
+# 	push!(positions, Coordinates(coordinates[i,1], coordinates[i,2]))
+# end
 
-travel_times = load("Inputs/input-travelTimes-$(PROB).jld", "travelTimes")
-num_rides = load("Inputs/input-numRides-$(PROB).jld", "numRides")
+# travel_times = load("Inputs/input-travelTimes-$(PROB).jld", "travelTimes")
+# num_rides = load("Inputs/input-numRides-$(PROB).jld", "numRides")
 
 function compute_cost_function(realData::AbstractArray{Float64,2}, inputData::AbstractArray{Float64,2}, numRides::AbstractArray{Int,2}; num_nodes = 192)
 	cost = 0
@@ -426,8 +426,8 @@ function compute_cost_function(realData::AbstractArray{Float64,2}, inputData::Ab
 	return cost
 end
 
-@time status, new_times = new_LP(graph, travel_times, num_rides, minRoadTime, distances, positions)
-@time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, new_times, positions, turn_cost=TURN_COST)
-@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
-print("")
+# @time status, new_times = new_LP(graph, travel_times, num_rides, minRoadTime, distances, positions)
+# @time new_graph, new_edge_dists, new_nodes = modifyGraphForDijkstra(graph, new_times, positions, turn_cost=TURN_COST)
+# @time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
+# print("")
 # compute_cost_function(real_times, travel_times, num_rides, num_nodes = nv(graph))

@@ -42,11 +42,14 @@ function simple_LP(
 
 	# Create path storing array and initialize. By convention totalPaths[i,1] is the equality constraint
 	numPaths = zeros(Int, numDataPoints)
-	totalPaths = Array(Array{Int},(numDataPoints, maxNumPathsPerOD))
-	for i = 1:numDataPoints, j = 1:maxNumPathsPerOD
-		totalPaths[i,j] = Int[]
+	totalPaths = Array(Any, numDataPoints)
+	totalNumExpensiveTurns = Array(Any, numDataPoints)
+	for i = 1:numDataPoints
+		totalPaths[i] = Array{Int}[]
+		totalNumExpensiveTurns[i] = Int[]
+		sizehint(totalPaths[i], maxNumPathsPerOD)
+		sizehint(totalNumExpensiveTurns[i], maxNumPathsPerOD)
 	end
-	totalNumExpensiveTurns = Array(Int, (numDataPoints, maxNumPathsPerOD))
 
 	# Run over all pairs of nodes that have data
 	srcs = Int[]
@@ -105,7 +108,7 @@ function simple_LP(
 
 		# Create handles for inequality constraints
 		if maxNumPathsPerOD > 1
-			@defConstrRef inequalityPath[1:numDataPoints, 1:(maxNumPathsPerOD-1)]
+			@defConstrRef inequalityPath[1:numDataPoints, 1:(max_rounds-1)]
 		end
 
 		# Set first LP objective
@@ -116,46 +119,49 @@ function simple_LP(
 		tic()
 		paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurnsParallel(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, new_edge_isExpensive)
 		for i=1:numDataPoints
-			index = findfirst(totalPaths[i, 1:maxNumPathsPerOD], paths[i])
+			index = findfirst(totalPaths[i], paths[i])
 			# If path already in paths
 			if index != 0
-				totalPaths[i,1], totalPaths[i,index] = totalPaths[i,index], totalPaths[i,1]
-				totalNumExpensiveTurns[i,1], totalNumExpensiveTurns[i,index] = totalNumExpensiveTurns[i,index], totalNumExpensiveTurns[i,1]			# New path is equality constraint
+				totalPaths[i][1], totalPaths[i][index] = totalPaths[i][index], totalPaths[i][1]
+				totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][index] = totalNumExpensiveTurns[i][index], totalNumExpensiveTurns[i][1]			# New path is equality constraint
 			# If we still have space to add the path
 			elseif numPaths[i] < maxNumPathsPerOD
 				numPaths[i] += 1
 				if numPaths[i] == 1
-					totalPaths[i,1] = paths[i]
-					totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
+					push!(totalPaths[i], paths[i])
+					push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
 				else
-					totalPaths[i,numPaths[i]], totalPaths[i,1] = totalPaths[i,1], paths[i]
-					totalNumExpensiveTurns[i,numPaths[i]], totalNumExpensiveTurns[i,1] = totalNumExpensiveTurns[i,1], numExpensiveTurns[i]
+					push!(totalPaths[i], paths[i])
+					push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
+					assert(numPaths[i] == length(totalPaths[i]))
+					totalPaths[i][numPaths[i]], totalPaths[i][1] = totalPaths[i][1], totalPaths[i][numPaths[i]]
+					totalNumExpensiveTurns[i][numPaths[i]], totalNumExpensiveTurns[i][1] = totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][numPaths[i]]
 				end
 			# If we need to remove a path
 			else
-				worstIndex = findWorstPathIndex(totalPaths[i,1:maxNumPathsPerOD], totalNumExpensiveTurns[i,1:maxNumPathsPerOD], turnCost, newTimes)
+				worstIndex = findWorstPathIndex(totalPaths[i], totalNumExpensiveTurns[i], turnCost, newTimes)
 				if worstIndex == 1
-					totalPaths[i,1] = paths[i]
-					totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
+					totalPaths[i][1] = paths[i]
+					totalNumExpensiveTurns[i][1] = numExpensiveTurns[i]
 				else
-					totalPaths[i,1], totalPaths[i, worstIndex] = paths[i], totalPaths[i,1]
-					totalNumExpensiveTurns[i,1], totalNumExpensiveTurns[i,worstIndex] = numExpensiveTurns[i], totalNumExpensiveTurns[i,1]
+					totalPaths[i][1], totalPaths[i][worstIndex] = paths[i], totalPaths[i][1]
+					totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][worstIndex] = numExpensiveTurns[i], totalNumExpensiveTurns[i][1]
 				end
 			end
 			# Add inequality constraints
 			if numPaths[i] > 1
 				for j = 1:(numPaths[i]-1)
 					if model_type == "strict"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - tc * totalNumExpensiveTurns[i,j+1] + tc * totalNumExpensiveTurns[i,1])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i][j+1][a],totalPaths[i][j+1][a+1]], a=1:(length(totalPaths[i][j+1])-1)} - sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} >= - tc * totalNumExpensiveTurns[i][j+1] + tc * totalNumExpensiveTurns[i][1])
 					elseif model_type == "relaxed"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - tc * totalNumExpensiveTurns[i,j+1] + tc * totalNumExpensiveTurns[i,1] - delta * travelTimes[srcs[i],dsts[i]])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i][j+1][a],totalPaths[i][j+1][a+1]], a=1:(length(totalPaths[i][j+1])-1)} - sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} >= - tc * totalNumExpensiveTurns[i][j+1] + tc * totalNumExpensiveTurns[i][1] - delta * travelTimes[srcs[i],dsts[i]])
 					end
 				end
 			end
 		end
 		# Equality constraints (shortest path close to travel time data)
-		@addConstraint(m, TLowerBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + tc * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] >= - epsilon[srcs[i],dsts[i]])
-		@addConstraint(m, TUpperBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + tc * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] <= epsilon[srcs[i],dsts[i]])
+		@addConstraint(m, TLowerBound[i=1:numDataPoints], sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} + tc * totalNumExpensiveTurns[i][1] - travelTimes[srcs[i],dsts[i]] >= - epsilon[srcs[i],dsts[i]])
+		@addConstraint(m, TUpperBound[i=1:numDataPoints], sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} + tc * totalNumExpensiveTurns[i][1] - travelTimes[srcs[i],dsts[i]] <= epsilon[srcs[i],dsts[i]])
 		toc()
 
 		# Solve LP

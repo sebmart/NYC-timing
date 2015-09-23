@@ -2,8 +2,8 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "relaxed_smooth"
-MAX_ROUNDS = 10
+MODEL = "relaxed_nothing"
+MAX_ROUNDS = 30
 MIN_RIDES = 1
 RADIUS = 140
 TIMES = "1214"
@@ -15,8 +15,8 @@ SAMPLE_SIZE = 50000
 
 RANDOM_CONSTRAINTS = false
 
-TURN_COST = 20.
-TURN_COST_AS_VARIABLE = false
+TURN_COST = 10.
+TURN_COST_AS_VARIABLE = true
 
 DELTA_BOUND = [0.06, 0.05, 0.04]
 
@@ -25,6 +25,8 @@ MAX_NUM_PATHS_PER_OD = 3 # at least 1 please
 COMPUTE_FINAL_SHORTEST_PATHS = true
 
 START_SIMPLE = true
+
+METROPOLIS = false
 
 function fast_LP(
 	manhattan::Manhattan,
@@ -46,7 +48,11 @@ function fast_LP(
 	maxNumPathsPerOD::Int=MAX_NUM_PATHS_PER_OD,
 	computeFinalSP::Bool = COMPUTE_FINAL_SHORTEST_PATHS,
 	startWithSimpleLP::Bool=START_SIMPLE,
-	randomConstraints::Bool=RANDOM_CONSTRAINTS)
+	randomConstraints::Bool=RANDOM_CONSTRAINTS,
+	metropolis::Bool=METROPOLIS,
+	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
+	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
+	prob::Float64=0.0)
 
 	graph = manhattan.network
 	roadTimes = deepcopy(manhattan.roadTime)
@@ -58,9 +64,10 @@ function fast_LP(
 	inn = [copy(in_neighbors(graph,i)) for i in nodes]
 
 	# Find nonzero travel times
-	pairs = [find(travel_times[i,:]) for i=nodes]
+	pairs = [find(travelTimes[i,:]) for i=nodes]
 	numDataPoints = sum([length(pairs[i]) for i=nodes])
 
+	# Create output directory name (sorry this is so complicated)
 	TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_ppc$(maxNumPathsPerOD)"
 	if preprocess
 		TESTDIR=string(TESTDIR, "_clust$(num_clusters)_rides$(sample_size)")
@@ -68,12 +75,15 @@ function fast_LP(
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
 	end
 	if turnCostAsVariable
-		TESTDIR=string(TESTDIR, "_tcvar")
+		TESTDIR=string(TESTDIR, "_tcvar_start$(turnCost)")
 	else
 		TESTDIR=string(TESTDIR, "_tc$(turnCost)")
 	end
 	if startWithSimpleLP
 		TESTDIR=string(TESTDIR, "_ss")
+	end
+	if metropolis
+		TESTDIR=string(TESTDIR, "_metropolis$(prob)")
 	end
 
 	# Create directory if necessary:
@@ -82,10 +92,17 @@ function fast_LP(
 	end
 	# Add vital information to file
 	writeDataToFile("Outputs/$TESTDIR", model_type, max_rounds, min_rides, radius, preprocess, num_clusters, sample_size, turnCost)
+	# Turn cost file
 	if turnCostAsVariable
 		turnCostFile = open("Outputs/$(TESTDIR)/tc.csv", "w")
 	end
-	errorFile = open("Outputs/$(TESTDIR)/errorstats.csv", "w")
+	# Metropolis error output
+	if metropolis
+		# specific error output
+	else
+		errorFile = open("Outputs/$(TESTDIR)/errorstats.csv", "w")
+	end
+	# Runtime info output
 	timeFile = open("Outputs/$(TESTDIR)/timestats.csv", "w")
 
 	# Tell us where output is going
@@ -93,11 +110,15 @@ function fast_LP(
 
 	# Create path storing array and initialize. By convention totalPaths[i,1] is the equality constraint
 	numPaths = zeros(Int, numDataPoints)
-	totalPaths = Array(Array{Int},(numDataPoints, maxNumPathsPerOD))
-	for i = 1:numDataPoints, j = 1:maxNumPathsPerOD
-		totalPaths[i,j] = Int[]
+	totalPaths = Array(Any, numDataPoints)
+	totalNumExpensiveTurns = Array(Any, numDataPoints)
+	for i = 1:numDataPoints
+		totalPaths[i] = Array{Int}[]
+		totalNumExpensiveTurns[i] = Int[]
+		sizehint(totalPaths[i], maxNumPathsPerOD)
+		sizehint(totalNumExpensiveTurns[i], maxNumPathsPerOD)
 	end
-	totalNumExpensiveTurns = Array(Int, (numDataPoints, maxNumPathsPerOD))
+
 
 	# Run over all pairs of nodes that have data
 	srcs = Int[]
@@ -166,7 +187,7 @@ function fast_LP(
 
 		# Create handles for inequality constraints
 		if maxNumPathsPerOD > 1
-			@defConstrRef inequalityPath[1:numDataPoints, 1:(maxNumPathsPerOD-1)]
+			@defConstrRef inequalityPath[1:numDataPoints, 1:(max_rounds-1)]
 		end
 
 		# Set first LP objective
@@ -179,57 +200,52 @@ function fast_LP(
 		end
 		for i=1:numDataPoints
 			if !(startWithSimpleLP) || l > 1
-				index = findfirst(totalPaths[i, 1:maxNumPathsPerOD], paths[i])
+				index = findfirst(totalPaths[i], paths[i])
 				# If path already in paths
 				if index != 0
-					totalPaths[i,1], totalPaths[i,index] = totalPaths[i,index], totalPaths[i,1]
-					totalNumExpensiveTurns[i,1], totalNumExpensiveTurns[i,index] = totalNumExpensiveTurns[i,index], totalNumExpensiveTurns[i,1]			# New path is equality constraint
+					totalPaths[i][1], totalPaths[i][index] = totalPaths[i][index], totalPaths[i][1]
+					totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][index] = totalNumExpensiveTurns[i][index], totalNumExpensiveTurns[i][1]			# New path is equality constraint
 				# If we still have space to add the path
 				elseif numPaths[i] < maxNumPathsPerOD
 					numPaths[i] += 1
 					if numPaths[i] == 1
-						totalPaths[i,1] = paths[i]
-						totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
+						push!(totalPaths[i], paths[i])
+						push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
 					else
-						totalPaths[i,numPaths[i]], totalPaths[i,1] = totalPaths[i,1], paths[i]
-						totalNumExpensiveTurns[i,numPaths[i]], totalNumExpensiveTurns[i,1] = totalNumExpensiveTurns[i,1], numExpensiveTurns[i]
+						push!(totalPaths[i], paths[i])
+						push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
+						assert(numPaths[i] == length(totalPaths[i]))
+						totalPaths[i][numPaths[i]], totalPaths[i][1] = totalPaths[i][1], totalPaths[i][numPaths[i]]
+						totalNumExpensiveTurns[i][numPaths[i]], totalNumExpensiveTurns[i][1] = totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][numPaths[i]]
 					end
 				# If we need to remove a path
 				else
-					worstIndex = findWorstPathIndex(totalPaths[i,1:maxNumPathsPerOD], totalNumExpensiveTurns[i,1:maxNumPathsPerOD], turnCost, newTimes)
+					worstIndex = findWorstPathIndex(totalPaths[i], totalNumExpensiveTurns[i], turnCost, newTimes)
 					if worstIndex == 1
-						totalPaths[i,1] = paths[i]
-						totalNumExpensiveTurns[i,1] = numExpensiveTurns[i]
+						totalPaths[i][1] = paths[i]
+						totalNumExpensiveTurns[i][1] = numExpensiveTurns[i]
 					else
-						totalPaths[i,1], totalPaths[i, worstIndex] = paths[i], totalPaths[i,1]
-						totalNumExpensiveTurns[i,1], totalNumExpensiveTurns[i,worstIndex] = numExpensiveTurns[i], totalNumExpensiveTurns[i,1]
+						totalPaths[i][1], totalPaths[i][worstIndex] = paths[i], totalPaths[i][1]
+						totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][worstIndex] = numExpensiveTurns[i], totalNumExpensiveTurns[i][1]
 					end
 				end
 			else
-				j = 1
-				while j < maxNumPathsPerOD
-					if length(totalPaths[i,j+1]) > 0
-						j += 1
-					else
-						break
-					end
-				end
-				numPaths[i] = j
+				numPaths[i] = length(totalPaths[i])
 			end
 			# Add inequality constraints
 			if numPaths[i] > 1
 				for j = 1:(numPaths[i]-1)
 					if split(model_type, "_")[1] == "strict"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - tc * totalNumExpensiveTurns[i,j+1] + tc * totalNumExpensiveTurns[i,1])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i][j+1][a],totalPaths[i][j+1][a+1]], a=1:(length(totalPaths[i][j+1])-1)} - sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} >= - tc * totalNumExpensiveTurns[i][j+1] + tc * totalNumExpensiveTurns[i][1])
 					elseif split(model_type, "_")[1] == "relaxed"
-						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i,j+1][a],totalPaths[i,j+1][a+1]], a=1:(length(totalPaths[i,j+1])-1)} - sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} >= - tc * totalNumExpensiveTurns[i,j+1] + tc * totalNumExpensiveTurns[i,1] - delta * travelTimes[srcs[i],dsts[i]])
+						inequalityPath[i,j] = @addConstraint(m, sum{t[totalPaths[i][j+1][a],totalPaths[i][j+1][a+1]], a=1:(length(totalPaths[i][j+1])-1)} - sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} >= - tc * totalNumExpensiveTurns[i][j+1] + tc * totalNumExpensiveTurns[i][1] - delta * travelTimes[srcs[i],dsts[i]])
 					end
 				end
 			end
 		end
 		# Equality constraints (shortest path close to travel time data)
-		@addConstraint(m, TLowerBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + tc * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] >= - epsilon[srcs[i],dsts[i]])
-		@addConstraint(m, TUpperBound[i=1:numDataPoints], sum{t[totalPaths[i,1][a],totalPaths[i,1][a+1]], a=1:(length(totalPaths[i,1])-1)} + tc * totalNumExpensiveTurns[i,1] - travelTimes[srcs[i],dsts[i]] <= epsilon[srcs[i],dsts[i]])
+		@addConstraint(m, TLowerBound[i=1:numDataPoints], sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} + tc * totalNumExpensiveTurns[i][1] - travelTimes[srcs[i],dsts[i]] >= - epsilon[srcs[i],dsts[i]])
+		@addConstraint(m, TUpperBound[i=1:numDataPoints], sum{t[totalPaths[i][1][a],totalPaths[i][1][a+1]], a=1:(length(totalPaths[i][1])-1)} + tc * totalNumExpensiveTurns[i][1] - travelTimes[srcs[i],dsts[i]] <= epsilon[srcs[i],dsts[i]])
 
 		# Define objective variables and constraints for second part of m
 		if split(model_type, "_")[2] == "smooth"
@@ -258,7 +274,7 @@ function fast_LP(
 		end
 		objective = getObjectiveValue(m)
 		if turnCostAsVariable
-			println(getValue(tc))
+			println("Left turn cost: ", getValue(tc))
 		end
 
 		println("**** Setting up second LP ****")
@@ -314,7 +330,11 @@ function fast_LP(
 				newTimes[element[1], element[2]] = element[3]
 			end
 			# Save updated Manhattan road times to file
-			saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
+			if metropolis
+				saveRoadTimes(newTimes, "$TESTDIR/metropolis-times-$l")
+			else
+				saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
+			end
 			if abs(objective - old_objective)/old_objective < 1e-10
 				save("Outputs/$TESTDIR/end.jld", "num_iter", l)
 				l = max_rounds
@@ -330,30 +350,37 @@ function fast_LP(
 			@time new_graph, new_edge_dists, new_nodes, new_edge_isExpensive = modifyGraphForDijkstra(graph, newTimes, manhattan.positions, turn_cost=turnCost)
 			old_nodes = getInverseMapping(new_nodes, nv(new_graph))
 			@time new_sp = parallelShortestPathsWithTurnsAuto(graph, new_graph, new_edge_dists, new_nodes)
-			avg_sq_err, avg_rel_err, avg_bias = compute_error(testingData, new_sp.traveltime)
-			write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
+			if metropolis
+				printErrorStatsToFile("Outputs/$TESTDIR/errorstats-$(actual_l).txt", real_TOD_metropolis, travelTimes, new_sp.traveltime, numRides, real_tij_metropolis, newTimes, num_nodes = nv(graph))
+			else
+				avg_sq_err, avg_rel_err, avg_bias = compute_error(testingData, new_sp.traveltime)
+				write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
+			end
 		end
 		l += 1
 		write(timeFile, string(l, ",", toc(), "\n"))
 	end
 	println("-- Saved outputs to directory Outputs/$(TESTDIR)/")
+	# Close log files
 	if turnCostAsVariable
 		close(turnCostFile)
 	end
-	close(errorFile)
+	if !metropolis
+		close(errorFile)
+	end
 	close(timeFile)
 	return status, newTimes
 end
 
-manhattan = loadCityGraph()
-if PREPROCESS
-	@time outputPreprocessedConstraints(manhattan, "training", radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false, times=TIMES)
-end
-if RANDOM_CONSTRAINTS
-	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=false, loadTestingMatrixDirectly=true)
-	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
-else
-	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
-end
-testing_data, numRides = loadNewTravelTimeData(trainOrTest="training", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true, saveTestingMatrix = false);
-@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_data, manhattan.roadTime)
+# manhattan = loadCityGraph()
+# if PREPROCESS
+# 	@time outputPreprocessedConstraints(manhattan, "training", radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false, times=TIMES)
+# end
+# if RANDOM_CONSTRAINTS
+# 	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=false, loadTestingMatrixDirectly=true)
+# 	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
+# else
+# 	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
+# end
+# testing_data, numRides = loadNewTravelTimeData(trainOrTest="training", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true, saveTestingMatrix = false);
+# @time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_data, manhattan.roadTime)
