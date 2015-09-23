@@ -23,21 +23,26 @@ type Manhattan <: TaxiProblem
   positions::Vector{Coordinates}
   tStart::DateTime
   tEnd::DateTime
-  function Manhattan(;sp=false)
-    c = new()
-    data = load("cities/manhattan/manhattan.jld")
-    c.network   = data["network"]
-    c.distances = data["distances"]
-    c.roadTime  = data["timings"]
-    c.roadCost  = c.roadTime/100 #temporary
-    c.positions = [Coordinates(i,j) for (i,j) in data["positions"]]
-    if sp
-        c.sp = shortestPaths(c.network, c.roadTime, c.roadCost)
+  function Manhattan(;sp=false, emptyType=false)
+    if emptyType
+      c = new()
+      return c
+    else
+      c = new()
+      data = load("cities/manhattan/manhattan.jld")
+      c.network   = data["network"]
+      c.distances = data["distances"]
+      c.roadTime  = data["timings"]
+      c.roadCost  = c.roadTime/100 #temporary
+      c.positions = [Coordinates(i,j) for (i,j) in data["positions"]]
+      if sp
+          c.sp = shortestPaths(c.network, c.roadTime, c.roadCost)
+      end
+      c.custs = Customer[]
+      c.taxis = Taxi[]
+      c.nTime = 0
+      return c
     end
-    c.custs = Customer[]
-    c.taxis = Taxi[]
-    c.nTime = 0
-    return c
   end
 end
 
