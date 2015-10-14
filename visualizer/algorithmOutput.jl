@@ -16,11 +16,16 @@ MAX_ROUNDS = 5
 function showAlgorithmResults(dir=DIRECTORY, rounds=1:MAX_ROUNDS)
 	man = load("../src/Cities/Saved/full_manhattan.jld","pb")
 	println("**** Original Manhattan ****")
+	for i = 1:nv(man.network), j=1:nv(man.network)
+		if man.roadTime[i,j] > 0
+			man.roadTime[i,j] = 0.038 * man.distances[i,j]
+		end
+	end
 	drawManhattan(man)
 
-	for i = rounds
+	for i in rounds
 		println("**** Iteration $i ****")
-		man.roadTime = load("../src/Outputs/$(dir)/manhattan-times-$i.jld", "times")
+		man.roadTime = load("/Users/arthurdelarue/Desktop/VRP-remote/NYC-timing/src/Outputs/$(dir)/manhattan-times-$i.jld", "times")
 		drawManhattan(man)
 	end
 end

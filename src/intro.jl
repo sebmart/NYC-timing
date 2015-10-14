@@ -4,6 +4,7 @@
 
 using JLD
 using Clustering
+using KDTrees
 @everywhere using DataFrames
 @everywhere using LightGraphs
 @everywhere using Dates
@@ -19,4 +20,6 @@ include("LP_tools/LP_tools.jl")
 include("LP_tools/preprocess.jl")
 include("LP_tools/load_constraints.jl")
 include("LP_tools/runTest.jl")
+include("LP_tools/dynamic_constraints.jl")
+include("LP_tools/data_handling.jl")
 include("simple_LP.jl")

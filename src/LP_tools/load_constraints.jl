@@ -146,13 +146,15 @@ function chooseConstraints(travelTimes::Array{Float64, 2}, numRides::Array{Int, 
 	newTravelTimes = zeros(num_nodes, num_nodes)
 	newNumRides = zeros(Int, (num_nodes, num_nodes))
 	for i = 1:sample_size
+		startNode = rand(1:num_nodes)
+		endNode = rand(1:num_nodes)
 		while true
-			startNode = rand(1:num_nodes)
-			endNode = rand(1:num_nodes)
 			# Keep them if not added yet
 			if numRides[startNode, endNode] > 0 && newNumRides[startNode, endNode] == 0
 				break
 			end
+			startNode = rand(1:num_nodes)
+			endNode = rand(1:num_nodes)
 		end
 		newNumRides[startNode, endNode] = numRides[startNode, endNode]
 		newTravelTimes[startNode, endNode] = travelTimes[startNode, endNode]

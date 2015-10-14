@@ -402,6 +402,10 @@ end
     Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
     Parallelized for speed.
     """
+    # Don't run parallelized version if it would be inefficient
+    if length(srcs) < batch_size
+        return reconstructMultiplePathsWithExpensiveTurns(previous, srcs, dsts, old_nodes, real_dsts, new_edge_isExpensive)
+    end
     paths = fill(Int[], length(srcs))
     expensiveTurns = zeros(Int, length(srcs))
 
