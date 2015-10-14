@@ -76,7 +76,7 @@ function splitTrainingAndTestingSets(df::DataFrame, inverseTestingSetFraction::I
 	return trainDf, testDf
 end
 
-function loadTrainingAndTestingSets(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1)
+function loadTrainingAndTestingSets(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
 	"""
 	Loads dataframe for rides, splits off 20% for permanent testing set (NEVER to be touched), then splits training set into 80% tr-learning and 20% tr-testing sets
 	"""
@@ -89,7 +89,7 @@ function loadTrainingAndTestingSets(;startTime::Int=12, endTime::Int=14, weekday
 	testingFileName = string(fileName, "_testing.jld")
 	trainLearnFileName = string(fileName, "_tr_learn.jld")
 	trainTestFileName = string(fileName, "_tr_test.jld")
-	if isfile(testingFileName) && isfile(trainLearnFileName) && isfile(trainTestFileName)
+	if isfile(testingFileName) && isfile(trainLearnFileName) && isfile(trainTestFileName) && loadFromCache
 		testDf = load(testingFileName, "df")
 		trainLearnDf = load(trainLearnFileName, "df")
 		trainTestDf = load(trainTestFileName, "df")
@@ -153,6 +153,29 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 	return travelTimes, numRides
 end
 
+function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String; startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true, radius::Int=140)
+	"""
+	Top level function, called before fast_LP to load travel times for data.
+	"""
+	# Select file name
+	fileName = "../Ride_data/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
+	if weekdays
+		fileName = string(fileName, "_wd")
+	else
+		fileName = string(fileName, "_we")
+	end
+	trainLearnFileName = string(fileName, "_tr_learn.jld")
+	trainLearnDf, trainTestDf, testDf = loadTrainingAndTestingSets(startTime=startTime, endTime=endTime, weekdays=weekdays, startMonth=startMonth, endMonth=endMonth)
+	if isfile(trainLearnFileName) && loadFromCache
+		travelTimes = load(trainLearnFileName, "travelTimes")
+		numRides = load(trainLearnFileName, "numRides")
+	else
+		travelTimes, numRides = mapRidesToNodes(trainLearnDf, nodePositions, method, radius=radius)
+		save(trainLearnFileName, "travelTimes", travelTimes, "numRides", numRides)
+	end
+	return travelTimes, numRides, trainTestDf, testDf
+end
+
 function buildNodeKDTree(nodePositions::Array{Coordinates,1})
 	"""
 	Given an array of node positions, returns a KDTree containing the nodePairs in 4D space. Also returns array mapping index in KDTree to pair of nodes.
@@ -176,7 +199,7 @@ function buildNodeKDTree(nodePositions::Array{Coordinates,1})
 	return nodeTree, nodePairs
 end
 
-function computeTestingError(rideTestingSet::DataFrame, nodePositions::Array{Coordinates}, algorithmOutput::Array{Float64,2}, method::String; radius::Int = 140)
+function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64}, nodePairs::Array{Int,2}, algorithmOutput::Array{Float64,2}, method::String; radius::Int = 140)
 	"""
 	Uses testing set to compute error on our method.
 	"""
@@ -185,8 +208,6 @@ function computeTestingError(rideTestingSet::DataFrame, nodePositions::Array{Coo
 	average_squared_error = 0
 	average_relative_error = 0
 	average_bias = 0
-	# Build node KDTree (expensive, will have to rethink this)
-	nodeTree, nodePairs = buildNodeKDTree(nodePositions)
 	# Loop through testing set and choose method
 	for i = 1:nrow(testDf)
 		if method == "nearest"

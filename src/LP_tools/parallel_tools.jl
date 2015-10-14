@@ -83,6 +83,7 @@ end
     function multiDijkstraInstance(nodes::UnitRange{Int})
         return partialShortestPathsWithTurns(n, new_n, nodes, newRoadTime, new_nodes)
     end
+    @everywhere gc()
     # Call pmap on wrapper function
     results = pmap(multiDijkstraInstance, locations)
 
@@ -418,6 +419,7 @@ end
         return reconstructMultiplePathsWithExpensiveTurns(previous, orig, dest, old_nodes, real_dsts, new_edge_isExpensive)
     end
 
+    @everywhere gc()
     # Call pmap on wrapper function
     results = pmap(callReconstruction, segmentedSources, segmentedDests)
 
