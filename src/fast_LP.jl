@@ -2,21 +2,24 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "relaxed_smooth"
-LAST_SMOOTH = true
+MODEL = "strict_smooth" # relaxed/strict_smooth/nothing/random
+LAST_SMOOTH = false
+ERROR_COMPUTATION = "single-ride" # average/single-ride
 
 MAX_ROUNDS = 50
+
 MIN_RIDES = 1
 RADIUS = 140
-TIMES = "1214"
-
-PREPROCESS = false
-NUM_CLUSTERS = 50
-
-SAMPLE_SIZE = 1000
+START_TIME = 12
+END_TIME = 14
+START_MONTH = 1
+END_MONTH = 8
+WEEKDAYS = true
+METHOD = "average"
 
 RANDOM_CONSTRAINTS = false
 DYNAMIC_CONSTRAINTS = true
+SAMPLE_SIZE = 1000
 NUM_OD_ADDED = 2500
 UPDATE_EVERY_N_ITERATIONS = 2
 
@@ -37,16 +40,19 @@ function fast_LP(
 	manhattan::Manhattan,
 	travelTimes::Array{Float64,2},
 	numRides::Array{Int,2},
-	testingData::Array{Float64,2},
+	testingData::Union(DataFrame, Array{Float64,2}),
 	startTimes::AbstractArray{Float64,2};
+	errorComputation::String=ERROR_COMPUTATION,
 	model_type::String=MODEL,
 	last_smooth::Bool=LAST_SMOOTH,
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
 	radius::Int=RADIUS,
-	times::String=TIMES,
-	preprocess::Bool=PREPROCESS,
-	num_clusters::Int=NUM_CLUSTERS,
+	startTime::Int=START_TIME,
+	endTime::Int=END_TIME,
+	startMonth::Int=START_MONTH,
+	endMonth::Int=END_MONTH,
+	method::String=METHOD,
 	sample_size::Int=SAMPLE_SIZE,
 	turnCost::Float64=TURN_COST,
 	turnCostAsVariable::Bool=TURN_COST_AS_VARIABLE,
@@ -62,6 +68,10 @@ function fast_LP(
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
 	prob::Float64=0.0)
+
+	assert(
+		(errorComputation == "average" && typeof(testingData) == Array{Float64,2}) || 
+		(errorComputation == "single-ride" && typeof(testingData) == DataFrame))
 
 	graph = manhattan.network
 	roadTimes = deepcopy(manhattan.roadTime)
@@ -83,13 +93,11 @@ function fast_LP(
 
 	# Create output directory name (sorry this is so complicated)
 	if !(last_smooth)
-		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_ppc$(maxNumPathsPerOD)"
+		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_$(model_type)_ppc$(maxNumPathsPerOD)_$(method)"
 	else
-		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(times)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)"
+		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)_$(method)"
 	end
-	if preprocess
-		TESTDIR=string(TESTDIR, "_clust$(num_clusters)_rides$(sample_size)")
-	elseif randomConstraints
+	if randomConstraints
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
 	elseif dynamicConstraints
 		TESTDIR=string(TESTDIR, "_dynConstr_st$(sample_size)_add$(numPairsToAdd)_every$(iterationMultiple)")
@@ -111,7 +119,7 @@ function fast_LP(
 		mkdir("Outputs/$TESTDIR")
 	end
 	# Add vital information to file
-	writeDataToFile("Outputs/$TESTDIR", model_type, max_rounds, min_rides, radius, preprocess, num_clusters, sample_size, turnCost)
+	writeDataToFile("Outputs/$TESTDIR", model_type, max_rounds, min_rides, radius, false, 0, sample_size, turnCost)
 	# Turn cost file
 	if turnCostAsVariable
 		turnCostFile = open("Outputs/$(TESTDIR)/tc.csv", "w")
@@ -140,6 +148,11 @@ function fast_LP(
 		totalNumExpensiveTurns[i] = Int[]
 		sizehint(totalPaths[i], maxNumPathsPerOD)
 		sizehint(totalNumExpensiveTurns[i], maxNumPathsPerOD)
+	end
+
+	if errorComputation == "single-ride"
+		println("**** Building KDTree of nodes for testing ****")
+		nodeTree, nodePairs = buildNodeKDTree(manhattan.positions)
 	end
 
 	println("**** Initializing dataset ****")
@@ -192,7 +205,7 @@ function fast_LP(
 
 		# Create JuMP model for LP and QP
 		println("**** Creating LP instance ****")
-		if l == 1 && !startWithSimpleLP
+		if l == 1 && !startWithSimpleLP && !dynamicConstraints
 			tolerance = 1e-4
 		else
 			tolerance = 1e-6
@@ -382,7 +395,11 @@ function fast_LP(
 			if metropolis
 				printErrorStatsToFile("Outputs/$TESTDIR/errorstats-$(actual_l).txt", real_TOD_metropolis, travelTimes, new_sp.traveltime, numRides, real_tij_metropolis, newTimes, num_nodes = nv(graph))
 			else
-				avg_sq_err, avg_rel_err, avg_bias = compute_error(testingData, new_sp.traveltime)
+				if errorComputation == "single-ride"
+					@time avg_sq_err, avg_rel_err, avg_bias = computeTestingError(testingData, nodeTree, nodePairs, new_sp.traveltime, method)
+				elseif errorComputation == "average"
+					@time avg_sq_err, avg_rel_err, avg_bias = computeAverageTestingError(testingData, new_sp.traveltime, num_nodes=nv(graph))
+				end
 				write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
 			end
 			if dynamicConstraints
@@ -413,16 +430,11 @@ function fast_LP(
 end
 
 manhattan = loadCityGraph()
-if PREPROCESS
-	@time outputPreprocessedConstraints(manhattan, "training", radius=RADIUS, numClusters=NUM_CLUSTERS, minRides=MIN_RIDES, sampleSize=SAMPLE_SIZE, overwrite = false, times=TIMES)
-end
-if DYNAMIC_CONSTRAINTS
-	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=false, loadTestingMatrixDirectly=true);
-elseif RANDOM_CONSTRAINTS
-	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=false, loadTestingMatrixDirectly=true);
+travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, METHOD, startTime=START_TIME, endTime=END_TIME, startMonth=START_MONTH, endMonth=END_MONTH, radius = RADIUS)
+if RANDOM_CONSTRAINTS
 	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
-else
-	travel_times, num_rides = loadNewTravelTimeData(trainOrTest = "training", radius=RADIUS, times=TIMES, min_rides=MIN_RIDES, preprocess=PREPROCESS, num_clusters=NUM_CLUSTERS, sampleSize = SAMPLE_SIZE);
 end
-testing_data, numRides = loadNewTravelTimeData(trainOrTest="testing", radius = RADIUS, times = TIMES, preprocess = false, loadTestingMatrixDirectly = true, saveTestingMatrix = false);
-@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_data, manhattan.roadTime)
+if ERROR_COMPUTATION == "single-ride"
+	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime)
+elseif ERROR_COMPUTATION == "average"
+	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_travel_times, manhattan.roadTime)

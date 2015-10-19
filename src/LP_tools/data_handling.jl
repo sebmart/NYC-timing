@@ -2,12 +2,14 @@
 # New way to load data into memory to plug into Julia
 # Also includes training/testing set separation and evaluation of method results
 
+MANHATTAN_NODES = 6134
+
 function createReducedJLDs()
 	"""
 	Converts reduced CSV files into JLD format with a DataFrame
 	Takes in no arguments and returns nothing (designed to be run once)
 	"""
-	for j = 8:12
+	for j = 10:12
 		println(j)
 		f = open("../Ride_data/data_link/reduced_trip_data_$j.csv")
 		df2 = DataFrame(pTime = DateTime[], dTime=DateTime[], pX=Float64[], pY=Float64[], dX=Float64[], dY=Float64[],)
@@ -49,7 +51,6 @@ function loadRides(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, s
 	df2 = DataFrame()
 	# Load data
 	for i = startMonth:endMonth
-		println(i)
 		df = load("../Ride_data/new_trip_data_$i.jld", "df")
 		if weekdays
 			df2 = vcat(df2,df[((dayofweek(df[:,:pTime]) .<= 5) & (startTime .<= hour(df[:,:pTime]) .<= endTime) & (dayofweek(df[:,:dTime]) .<= 5) & (startTime .<= hour(df[:,:dTime]) .<= endTime)),:])
@@ -133,12 +134,9 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 		for i in 1:4
 			treeL[i,:] = trainDf[:,(i+2)]
 		end
-		println("Constructing KDTree")
+		println("--Constructing KDTree")
 		@time treeL = KDTree(treeL)
 		for i = 1:length(nodePositions), j=1:length(nodePositions)
-			if i % 500 == 0 && j == 1
-				println(i)
-			end
 			if i != j
 				vec = [nodePositions[i].x, nodePositions[i].y, nodePositions[j].x, nodePositions[j].y]
 				index = inball(treeL, vec, float(radius))
@@ -157,6 +155,7 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String;
 	"""
 	Top level function, called before fast_LP to load travel times for data.
 	"""
+	println("**** Loading training and testing sets ****")
 	# Select file name
 	fileName = "../Ride_data/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
 	if weekdays
@@ -165,6 +164,7 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String;
 		fileName = string(fileName, "_we")
 	end
 	trainLearnFileName = string(fileName, "_tr_learn.jld")
+	trainTestFileName = string(fileName, "_tr_test.jld")
 	trainLearnDf, trainTestDf, testDf = loadTrainingAndTestingSets(startTime=startTime, endTime=endTime, weekdays=weekdays, startMonth=startMonth, endMonth=endMonth)
 	if isfile(trainLearnFileName) && loadFromCache
 		travelTimes = load(trainLearnFileName, "travelTimes")
@@ -173,7 +173,14 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String;
 		travelTimes, numRides = mapRidesToNodes(trainLearnDf, nodePositions, method, radius=radius)
 		save(trainLearnFileName, "travelTimes", travelTimes, "numRides", numRides)
 	end
-	return travelTimes, numRides, trainTestDf, testDf
+	if isfile(trainTestFileName) && loadFromCache
+		testingTravelTimes = load(trainTestFileName, "travelTimes")
+		testingNumRides = load(trainTestFileName, "numRides")
+	else
+		testingTravelTimes, testingNumRides = mapRidesToNodes(trainTestDf, nodePositions, method, radius=radius)
+		save(trainTestFileName, "travelTimes". testingTravelTimes, "numRides", testingNumRides)
+	end
+	return travelTimes, numRides, trainTestDf, testingTravelTimes, testingNumRides, testDf
 end
 
 function buildNodeKDTree(nodePositions::Array{Coordinates,1})
@@ -194,10 +201,32 @@ function buildNodeKDTree(nodePositions::Array{Coordinates,1})
 			index += 1
 		end
 	end
-	println("Constructing KDTree")
 	@time nodeTree = KDTree(nodeTree)
 	return nodeTree, nodePairs
 end
+
+function computeAverageTestingError(testingTravelTimes::Array{Float64,2}, algorithmOutput::Array{float64, 2}; num_nodes::Int = MANHATTAN_NODES)
+	"""
+	Given a matrix of TABs from testing Data and calculated by our algorithm, returns some error measures
+	"""
+	num_results = 0
+	average_squared_error = 0
+	average_relative_error = 0
+	average_bias = 0
+	for i = 1:num_nodes, j=1:num_nodes
+		if testingData[i,j] > 0
+			average_squared_error = (num_results * average_squared_error + (testingTravelTimes[i,j] - algorithmOutput[i,j]) ^ 2) / (num_results + 1)
+			average_relative_error = (num_results * average_relative_error + abs(testingTravelTimes[i,j] - algorithmOutput[i,j])/testingTravelTimes[i,j])/(num_results + 1)
+			average_bias = (num_results * average_bias + (algorithmOutput[i,j] - testingTravelTimes[i,j]))/(num_results + 1)
+			num_results += 1
+		end
+	end
+	println("------------------------------------------------")
+	println("Average squared error: \t\t\t\t\t", average_squared_error)
+	println("Average relative error: \t\t\t\t", average_relative_error)
+	println("Average bias: \t\t\t\t\t\t", average_bias)
+	println("------------------------------------------------")
+	return average_squared_error, average_relative_error, average_bias
 
 function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64}, nodePairs::Array{Int,2}, algorithmOutput::Array{Float64,2}, method::String; radius::Int = 140)
 	"""
@@ -221,7 +250,7 @@ function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64
 			# Update errors
 			if predictedTime != 0
 				average_squared_error = (num_results * average_squared_error + (testingTime - predictedTime) ^ 2) / (num_results + 1)
-				average_relative_error = (num_results * average_squared_error + abs(testingTime - predictedTime)/newTime) / (num_results + 1)
+				average_relative_error = (num_results * average_relative_error + abs(testingTime - predictedTime)/testingTime) / (num_results + 1)
 				average_bias = (num_results * average_bias + (predictedTime - testingTime))/(num_results + 1)
 				num_results += 1
 			end
@@ -239,7 +268,7 @@ function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64
 			# Update errors (if any neighbors were found within 140 meters)
 			if predictedTime != 0
 				average_squared_error = (num_results * average_squared_error + (testingTime - predictedTime) ^ 2) / (num_results + 1)
-				average_relative_error = (num_results * average_squared_error + abs(testingTime - predictedTime)/newTime) / (num_results + 1)
+				average_relative_error = (num_results * average_relative_error + abs(testingTime - predictedTime)/testingTime) / (num_results + 1)
 				average_bias = (num_results * average_bias + (predictedTime - testingTime))/(num_results + 1)
 				num_results += 1
 			end
