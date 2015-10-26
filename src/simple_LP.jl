@@ -7,8 +7,8 @@ function simple_LP(
 	travelTimes::Array{Float64,2},
 	numRides::Array{Int,2},
 	testingData::Array{Float64,2},
-	directory::String;
-	model_type::String="relaxed",
+	directory::AbstractString;
+	model_type::AbstractString="relaxed",
 	max_rounds::Int=5,
 	turnCost::Float64=10.0,
 	turnCostAsVariable::Bool=true,

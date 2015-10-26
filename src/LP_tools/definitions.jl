@@ -84,7 +84,7 @@ immutable DijkstraEntry{Float64}
 end
 
 # define appropriate comparators for heap entries
-< (e1::DijkstraEntry, e2::DijkstraEntry) = e1.dist < e2.dist
+<(e1::DijkstraEntry, e2::DijkstraEntry) = e1.dist < e2.dist
 Base.isless(e1::DijkstraEntry, e2::DijkstraEntry) = e1.dist < e2.dist
 
 #Represent an assigned customer (not fixed time-windows)

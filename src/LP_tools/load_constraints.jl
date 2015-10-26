@@ -2,20 +2,20 @@
 # Gets city information from manhattan.jld object and travel time information from Travel time CSV
 # Authored by Arthur J Delarue on 6/8/15
 
-function saveManhattan(pb::TaxiProblem, name::String; compress=false)
+function saveManhattan(pb::TaxiProblem, name::AbstractString; compress=false)
   save("Cities/Saved/$name.jld", "pb", pb, compress=compress)
 end
 
-function loadManhattan(name::String)
+function loadManhattan(name::AbstractString)
   pb = load("Cities/Saved/$name.jld","pb")
   return pb
 end
 
-function saveRoadTimes(times::SparseMatrixCSC{Float64,Int}, name::String; compress=false)
+function saveRoadTimes(times::SparseMatrixCSC{Float64,Int}, name::AbstractString; compress=false)
   save("Outputs/$name.jld", "times", times, compress=compress)
 end
 
-function loadRoadTimes(name::String)
+function loadRoadTimes(name::AbstractString)
   times = load("Outputs/$name.jld","times")
   return times
 end
@@ -64,7 +64,7 @@ function loadCityGraph(;fromScratch::Bool=false, useShortestPaths::Bool=true,fix
 	return manhattan
 end
 
-function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::Int=4, num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64 = 50, sampleSize::Int64=10000) 
+function loadTravelTimeData(;radius::Int=40, times::AbstractString= "1214", min_rides::Int=4, num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64 = 50, sampleSize::Int64=10000) 
 	# Hardcoded for simplicity. Map of Manhattan not likely to change anytime soon
 	"""
 	Return array of travel times between pairs of nodes A,B obtained from NYC dataset
@@ -97,7 +97,7 @@ function loadTravelTimeData(;radius::Int=40, times::String= "1214", min_rides::I
 	return travelTimes
 end
 
-function loadNewTravelTimeData(;trainOrTest::String="training", radius::Int=40, times::String="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4, saveTestingMatrix::Bool=false, loadTestingMatrixDirectly=false)
+function loadNewTravelTimeData(;trainOrTest::AbstractString="training", radius::Int=40, times::AbstractString="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4, saveTestingMatrix::Bool=false, loadTestingMatrixDirectly=false)
 	"""
 	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
 	"""

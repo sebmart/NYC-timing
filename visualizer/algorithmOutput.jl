@@ -14,7 +14,7 @@ DIRECTORY = "new_r140_minr1_i5_wd_1214_avgtr_clust50_rides50000"
 MAX_ROUNDS = 5
 
 function showAlgorithmResults(dir=DIRECTORY, rounds=1:MAX_ROUNDS)
-	man = load("../src/Cities/Saved/full_manhattan.jld","pb")
+	man = Manhattan()
 	println("**** Original Manhattan ****")
 	for i = 1:nv(man.network), j=1:nv(man.network)
 		if man.roadTime[i,j] > 0
@@ -26,6 +26,14 @@ function showAlgorithmResults(dir=DIRECTORY, rounds=1:MAX_ROUNDS)
 	for i in rounds
 		println("**** Iteration $i ****")
 		man.roadTime = load("/Users/arthurdelarue/Desktop/VRP-remote/NYC-timing/src/Outputs/$(dir)/manhattan-times-$i.jld", "times")
+		avg_speed = 0
+		num_streets = 0
+		for i = 1:nv(man.network), j = out_neighbors(man.network, i)
+			avg_speed = (avg_speed * num_streets + man.distances[i,j]/man.roadTime[i,j])/(num_streets + 1)
+			num_streets += 1
+		end
+		avg_speed = 3.6 * avg_speed
+		println("Average speed: $avg_speed")
 		drawManhattan(man)
 	end
 end

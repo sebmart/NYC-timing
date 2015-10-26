@@ -28,7 +28,7 @@ function compute_error(testingData::AbstractArray{Float64, 2}, trainingData::Abs
 	return average_squared_error, average_relative_error, average_bias
 end
 
-function loadTrainingResults(directoryName::String, max_iterations::Int, manhattan::Manhattan, turnCost::Float64)
+function loadTrainingResults(directoryName::AbstractString, max_iterations::Int, manhattan::Manhattan, turnCost::Float64)
 	"""
 	Given the name of the directory where the algorithm output was saved, run shortest paths to determine travel times between all pairs of nodes.
 	"""

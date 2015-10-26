@@ -18,8 +18,8 @@ function chooseStartingConstraints(
 	# Create vectors for sources and destinations
 	srcs = Int[]
 	dsts = Int[]
-	sizehint(srcs, sample_size)
-	sizehint(dsts, sample_size)
+	sizehint!(srcs, sample_size)
+	sizehint!(dsts, sample_size)
 	for i in 1:size(travelTimes)[1], j in 1:size(travelTimes)[2]
 		if newTravelTimes[i,j] > 0
 			# Load sources and destinations: will be useful when adding constraints
@@ -56,7 +56,7 @@ function updateConstraints(
 	# TODO
 	# Select new constraints
 	indicesVector = (Int,Int)[]
-	sizehint(indicesVector, 12000000)
+	sizehint!(indicesVector, 12000000)
 	for i = 1:size(travelTimes)[1], j = 1:size(travelTimes)[1]
 		if travelTimes[i,j] > 0
 			push!(indicesVector, (i,j))

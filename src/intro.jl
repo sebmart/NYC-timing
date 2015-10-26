@@ -3,7 +3,7 @@
 # Authored by Arthur J Delarue on 6/9/15
 
 using JLD
-using Clustering
+# using Clustering
 using KDTrees
 @everywhere using DataFrames
 @everywhere using LightGraphs
@@ -17,7 +17,7 @@ using KDTrees
 @everywhere include("LP_tools/shortestpath.jl")
 include("LP_tools/parallel_tools.jl")
 include("LP_tools/LP_tools.jl")
-include("LP_tools/preprocess.jl")
+# include("LP_tools/preprocess.jl")
 include("LP_tools/load_constraints.jl")
 include("LP_tools/runTest.jl")
 include("LP_tools/dynamic_constraints.jl")

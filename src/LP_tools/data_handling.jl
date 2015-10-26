@@ -9,9 +9,9 @@ function createReducedJLDs()
 	Converts reduced CSV files into JLD format with a DataFrame
 	Takes in no arguments and returns nothing (designed to be run once)
 	"""
-	for j = 10:12
+	for j = 11:12
 		println(j)
-		f = open("../Ride_data/data_link/reduced_trip_data_$j.csv")
+		f = open("../../Full_data/reduced_trip_data_$j.csv")
 		df2 = DataFrame(pTime = DateTime[], dTime=DateTime[], pX=Float64[], pY=Float64[], dX=Float64[], dY=Float64[],)
 		for (i, ln) in enumerate(eachline(f))
 			if i == 1
@@ -31,12 +31,12 @@ function createReducedJLDs()
 	return nothing
 end
 
-function loadRides(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
+function loadRides(;year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
 	"""
 	Load appropriate set of rides, between startTime and endTime, startMonth and endMonth, on weekdays or weekends. Supports caching to save time.
 	"""
 	# Initialize output file name
-	fileName = "../Ride_data/rides_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
+	fileName = "../Ride_data/$(year)/rides_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
 	if weekdays
 		fileName = string(fileName, "_wd.jld")
 	else
@@ -51,7 +51,7 @@ function loadRides(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, s
 	df2 = DataFrame()
 	# Load data
 	for i = startMonth:endMonth
-		df = load("../Ride_data/new_trip_data_$i.jld", "df")
+		df = load("../Ride_data/$(year)/reduced_jld/trip_data_$i.jld", "df")
 		if weekdays
 			df2 = vcat(df2,df[((dayofweek(df[:,:pTime]) .<= 5) & (startTime .<= hour(df[:,:pTime]) .<= endTime) & (dayofweek(df[:,:dTime]) .<= 5) & (startTime .<= hour(df[:,:dTime]) .<= endTime)),:])
 		else
@@ -77,11 +77,11 @@ function splitTrainingAndTestingSets(df::DataFrame, inverseTestingSetFraction::I
 	return trainDf, testDf
 end
 
-function loadTrainingAndTestingSets(;startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
+function loadTrainingAndTestingSets(;year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
 	"""
 	Loads dataframe for rides, splits off 20% for permanent testing set (NEVER to be touched), then splits training set into 80% tr-learning and 20% tr-testing sets
 	"""
-	fileName = "../Ride_data/rides_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
+	fileName = "../Ride_data/$(year)/rides_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
 	if weekdays
 		fileName = string(fileName, "_wd")
 	else
@@ -105,10 +105,11 @@ function loadTrainingAndTestingSets(;startTime::Int=12, endTime::Int=14, weekday
 	return trainLearnDf, trainTestDf, testDf
 end
 
-function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1}, method::String; radius::Int = 140)
+function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1}, method::AbstractString; radius::Int = 140)
 	"""
 	Given the learning set of rides, an array of the node locations and the appropriate method, converts dataframe full of rides into travelTime matrix
 	"""
+	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
 	travelTimes = zeros(length(nodePositions), length(nodePositions))
 	numRides = zeros(Int, (length(nodePositions), length(nodePositions)))
 	if method == "nearest"
@@ -125,8 +126,10 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 			index, dist = knn(nodeTree, [trainDf[i,:pX], trainDf[i,:pY], trainDf[i,:dX], trainDf[i,:dY]], 1)
 			index = index[1]
 			newTime = (trainDf[i,:dTime] - trainDf[i,:pTime]).value/1000
-			travelTimes[nodePairs[index,1], nodePairs[index,2]] = (travelTimes[nodePairs[index,1], nodePairs[index,2]] * numRides[nodePairs[index,1], nodePairs[index,2]] + newTime)/(numRides[nodePairs[index,1],nodePairs[index,2]]+1)
-			numRides[nodePairs[index,1], nodePairs[index,2]] += 1
+			if !(nodePairs[index,1] in highwayNodes) && !(nodePairs[index,2] in highwayNodes)
+				travelTimes[nodePairs[index,1], nodePairs[index,2]] = (travelTimes[nodePairs[index,1], nodePairs[index,2]] * numRides[nodePairs[index,1], nodePairs[index,2]] + newTime)/(numRides[nodePairs[index,1],nodePairs[index,2]]+1)
+				numRides[nodePairs[index,1], nodePairs[index,2]] += 1
+			end
 		end
 	elseif method == "average"
 		# Put rides in KDTree
@@ -137,6 +140,9 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 		println("--Constructing KDTree")
 		@time treeL = KDTree(treeL)
 		for i = 1:length(nodePositions), j=1:length(nodePositions)
+			if i % 500 == 0
+				println(i)
+			end
 			if i != j
 				vec = [nodePositions[i].x, nodePositions[i].y, nodePositions[j].x, nodePositions[j].y]
 				index = inball(treeL, vec, float(radius))
@@ -151,13 +157,13 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 	return travelTimes, numRides
 end
 
-function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String; startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true, radius::Int=140)
+function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::AbstractString; year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true, radius::Int=140)
 	"""
 	Top level function, called before fast_LP to load travel times for data.
 	"""
 	println("**** Loading training and testing sets ****")
 	# Select file name
-	fileName = "../Ride_data/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
+	fileName = "../Ride_data/$(year)/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
 	if weekdays
 		fileName = string(fileName, "_wd")
 	else
@@ -178,7 +184,7 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::String;
 		testingNumRides = load(trainTestFileName, "numRides")
 	else
 		testingTravelTimes, testingNumRides = mapRidesToNodes(trainTestDf, nodePositions, method, radius=radius)
-		save(trainTestFileName, "travelTimes". testingTravelTimes, "numRides", testingNumRides)
+		save(trainTestFileName, "travelTimes", testingTravelTimes, "numRides", testingNumRides)
 	end
 	return travelTimes, numRides, trainTestDf, testingTravelTimes, testingNumRides, testDf
 end
@@ -205,7 +211,7 @@ function buildNodeKDTree(nodePositions::Array{Coordinates,1})
 	return nodeTree, nodePairs
 end
 
-function computeAverageTestingError(testingTravelTimes::Array{Float64,2}, algorithmOutput::Array{float64, 2}; num_nodes::Int = MANHATTAN_NODES)
+function computeAverageTestingError(testingTravelTimes::Array{Float64,2}, algorithmOutput::Array{Float64, 2}; num_nodes::Int = MANHATTAN_NODES)
 	"""
 	Given a matrix of TABs from testing Data and calculated by our algorithm, returns some error measures
 	"""
@@ -214,7 +220,7 @@ function computeAverageTestingError(testingTravelTimes::Array{Float64,2}, algori
 	average_relative_error = 0
 	average_bias = 0
 	for i = 1:num_nodes, j=1:num_nodes
-		if testingData[i,j] > 0
+		if testingTravelTimes[i,j] > 0
 			average_squared_error = (num_results * average_squared_error + (testingTravelTimes[i,j] - algorithmOutput[i,j]) ^ 2) / (num_results + 1)
 			average_relative_error = (num_results * average_relative_error + abs(testingTravelTimes[i,j] - algorithmOutput[i,j])/testingTravelTimes[i,j])/(num_results + 1)
 			average_bias = (num_results * average_bias + (algorithmOutput[i,j] - testingTravelTimes[i,j]))/(num_results + 1)
@@ -227,8 +233,9 @@ function computeAverageTestingError(testingTravelTimes::Array{Float64,2}, algori
 	println("Average bias: \t\t\t\t\t\t", average_bias)
 	println("------------------------------------------------")
 	return average_squared_error, average_relative_error, average_bias
+end
 
-function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64}, nodePairs::Array{Int,2}, algorithmOutput::Array{Float64,2}, method::String; radius::Int = 140)
+function computeTestingError(rideTestingSet::DataFrame, nodeTree::KDTree{Float64}, nodePairs::Array{Int,2}, algorithmOutput::Array{Float64,2}, method::AbstractString; radius::Int = 140)
 	"""
 	Uses testing set to compute error on our method.
 	"""

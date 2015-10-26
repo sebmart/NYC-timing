@@ -78,8 +78,8 @@ function print_iis_gurobi(m::Model, im::Gurobi.GurobiMathProgModel)
     println("End of IIS")
 end
 
-function writeDataToFile(directory::String,
-    model_type::String="",
+function writeDataToFile(directory::AbstractString,
+    model_type::AbstractString="",
     max_rounds::Int=0,
     min_rides::Int=0,
     radius::Int=0,
@@ -120,8 +120,8 @@ function writeDataToFile(directory::String,
     close(outputFile)
 end
 
-function writeDataToFile(directory::String,
-    model_type::String="",
+function writeDataToFile(directory::AbstractString,
+    model_type::AbstractString="",
     max_rounds::Int=0,
     min_rides::Int=0,
     radius::Int=0,
@@ -153,7 +153,7 @@ function writeDataToFile(directory::String,
     close(outputFile)
 end
 
-function appendDataToFile(directory::String,
+function appendDataToFile(directory::AbstractString,
     numBrokenConstraints::Int)
     """
     Adds the number of broken constraints through the relaxation parameter to info.txt

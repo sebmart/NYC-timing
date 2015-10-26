@@ -2,57 +2,59 @@
 # New LP formulation for travel time estimation
 # Authored by Arthur J Delarue on 7/2/15
 
-MODEL = "strict_smooth" # relaxed/strict_smooth/nothing/random
-LAST_SMOOTH = false
-ERROR_COMPUTATION = "single-ride" # average/single-ride
+MODEL = "relaxed_smooth"		# relaxed/strict _ smooth/nothing/random
+LAST_SMOOTH = false 			# true if last iteration is smooth, false otherwise. Irrelevant if model is smooth already.
+ERROR_COMPUTATION = "both" 		# average/single-ride/both
 
-MAX_ROUNDS = 50
+MAX_ROUNDS = 5					# max number of iterations
 
-MIN_RIDES = 1
-RADIUS = 140
+MIN_RIDES = 1					# min number of rides
+RADIUS = 140					# radius (4D Euclidian)
+YEAR = 2013						
 START_TIME = 12
 END_TIME = 14
 START_MONTH = 1
-END_MONTH = 8
-WEEKDAYS = true
-METHOD = "average"
+END_MONTH = 1
+WEEKDAYS = true 				# true for weekdays, false for weekends
+METHOD = "average"				# average/nearest [neighbor]
 
-RANDOM_CONSTRAINTS = false
-DYNAMIC_CONSTRAINTS = true
-SAMPLE_SIZE = 1000
-NUM_OD_ADDED = 2500
-UPDATE_EVERY_N_ITERATIONS = 2
+RANDOM_CONSTRAINTS = false 		# true for purely random constraints, false otw
+DYNAMIC_CONSTRAINTS = true 		# true for dynamic constraints, false otw
+SAMPLE_SIZE = 1000 				# starting number of constraints
+NUM_OD_ADDED = 1000 			# number of (O,D) pairs to add
+UPDATE_EVERY_N_ITERATIONS = 1 	# add number of (O,D) above every $N iterations
 
-TURN_COST = 0.
-TURN_COST_AS_VARIABLE = false
+TURN_COST = 0.	 				# turning cost initial value
+TURN_COST_AS_VARIABLE = false 	# true if LP updates turning cost, false otw
 
-DELTA_BOUND = [0.06, 0.05, 0.04]
+DELTA_BOUND = [0.06, 0.05, 0.04]	# relaxation base (sketchy)
 
-MAX_NUM_PATHS_PER_OD = 3 # at least 1 please
+MAX_NUM_PATHS_PER_OD = 3 		# at least 1 please
 
-COMPUTE_FINAL_SHORTEST_PATHS = true
+COMPUTE_FINAL_SHORTEST_PATHS = true 	# Should always be true unless trying to save time somehow
 
-START_SIMPLE = false
+START_SIMPLE = false 			# true if initial simple LP is used, false otw
 
-METROPOLIS = false
+METROPOLIS = false 				# always set this to false unless you wish to crash everything
 
 function fast_LP(
 	manhattan::Manhattan,
 	travelTimes::Array{Float64,2},
 	numRides::Array{Int,2},
-	testingData::Union(DataFrame, Array{Float64,2}),
+	testingData::Union{DataFrame, Array{Float64,2}},
 	startTimes::AbstractArray{Float64,2};
-	errorComputation::String=ERROR_COMPUTATION,
-	model_type::String=MODEL,
+	errorComputation::AbstractString=ERROR_COMPUTATION,
+	model_type::AbstractString=MODEL,
 	last_smooth::Bool=LAST_SMOOTH,
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
 	radius::Int=RADIUS,
+	year::Int=YEAR,
 	startTime::Int=START_TIME,
 	endTime::Int=END_TIME,
 	startMonth::Int=START_MONTH,
 	endMonth::Int=END_MONTH,
-	method::String=METHOD,
+	method::AbstractString=METHOD,
 	sample_size::Int=SAMPLE_SIZE,
 	turnCost::Float64=TURN_COST,
 	turnCostAsVariable::Bool=TURN_COST_AS_VARIABLE,
@@ -67,11 +69,8 @@ function fast_LP(
 	metropolis::Bool=METROPOLIS,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
-	prob::Float64=0.0)
-
-	assert(
-		(errorComputation == "average" && typeof(testingData) == Array{Float64,2}) || 
-		(errorComputation == "single-ride" && typeof(testingData) == DataFrame))
+	prob::Float64=0.0,
+	testingData2::Array{Float64,2}=zeros(1,1))
 
 	graph = manhattan.network
 	roadTimes = deepcopy(manhattan.roadTime)
@@ -93,9 +92,9 @@ function fast_LP(
 
 	# Create output directory name (sorry this is so complicated)
 	if !(last_smooth)
-		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_$(model_type)_ppc$(maxNumPathsPerOD)_$(method)"
+		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_y$(year)_$(model_type)_ppc$(maxNumPathsPerOD)_data$(method)_error$errorComputation"
 	else
-		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)_$(method)"
+		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_y$(year)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)_data$(method)_error$errorComputation"
 	end
 	if randomConstraints
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
@@ -146,11 +145,11 @@ function fast_LP(
 	for i = 1:numDataPoints
 		totalPaths[i] = Array{Int}[]
 		totalNumExpensiveTurns[i] = Int[]
-		sizehint(totalPaths[i], maxNumPathsPerOD)
-		sizehint(totalNumExpensiveTurns[i], maxNumPathsPerOD)
+		sizehint!(totalPaths[i], maxNumPathsPerOD)
+		sizehint!(totalNumExpensiveTurns[i], maxNumPathsPerOD)
 	end
 
-	if errorComputation == "single-ride"
+	if errorComputation == "single-ride" || errorComputation == "both"
 		println("**** Building KDTree of nodes for testing ****")
 		nodeTree, nodePairs = buildNodeKDTree(manhattan.positions)
 	end
@@ -162,8 +161,8 @@ function fast_LP(
 		# Run over all pairs of nodes that have data
 		srcs = Int[]
 		dsts = Int[]
-		sizehint(srcs, sample_size)
-		sizehint(dsts, sample_size)
+		sizehint!(srcs, sample_size)
+		sizehint!(dsts, sample_size)
 		for i in nodes, j in nodes
 			if travelTimes[i,j] > 0
 				# Load sources and destinations: will be useful when adding constraints
@@ -397,10 +396,15 @@ function fast_LP(
 			else
 				if errorComputation == "single-ride"
 					@time avg_sq_err, avg_rel_err, avg_bias = computeTestingError(testingData, nodeTree, nodePairs, new_sp.traveltime, method)
+					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
 				elseif errorComputation == "average"
 					@time avg_sq_err, avg_rel_err, avg_bias = computeAverageTestingError(testingData, new_sp.traveltime, num_nodes=nv(graph))
+					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
+				elseif errorComputation == "both"
+					@time avg_sq_err, avg_rel_err, avg_bias = computeTestingError(testingData, nodeTree, nodePairs, new_sp.traveltime, method)
+					@time avg_sq_err_2, avg_rel_err_2, avg_bias_2 = computeAverageTestingError(testingData2, new_sp.traveltime, num_nodes=nv(graph))
+					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias, ",", avg_sq_err_2, ",", avg_rel_err_2, ",", avg_bias_2,"\n"))
 				end
-				write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
 			end
 			if dynamicConstraints
 				write(numConstraintsFile, string(l,",",length(srcs), "\n"))
@@ -430,7 +434,7 @@ function fast_LP(
 end
 
 manhattan = loadCityGraph()
-travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, METHOD, startTime=START_TIME, endTime=END_TIME, startMonth=START_MONTH, endMonth=END_MONTH, radius = RADIUS)
+travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, METHOD, year=YEAR, startTime=START_TIME, endTime=END_TIME, startMonth=START_MONTH, endMonth=END_MONTH, radius = RADIUS)
 if RANDOM_CONSTRAINTS
 	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
 end
@@ -438,3 +442,6 @@ if ERROR_COMPUTATION == "single-ride"
 	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime)
 elseif ERROR_COMPUTATION == "average"
 	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_travel_times, manhattan.roadTime)
+elseif ERROR_COMPUTATION == "both"
+	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime, testingData2 = testing_travel_times)
+end

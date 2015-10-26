@@ -175,7 +175,7 @@ end
     parents = zeros(Int, nvg)
     visited = falses(nvg)
     h = DijkstraEntry{Float64}[]
-    sizehint(h, nvg)
+    sizehint!(h, nvg)
     H = mutable_binary_minheap(h)
     hmap = zeros(Int, nvg)
     dists[src] = 0.0
@@ -243,7 +243,7 @@ end
     visited = falses(nvg)
     # Create heap
     h = DijkstraEntry{Float64}[]
-    sizehint(h, nvg)
+    sizehint!(h, nvg)
     H = mutable_binary_minheap(h)
     hmap = zeros(Int, nvg)
     
@@ -333,11 +333,11 @@ end
     # Create new graph
     newGraph = Network()
     new_nodes = Array{Int}[]
-    sizehint(new_nodes, nvg)
+    sizehint!(new_nodes, nvg)
     # Deal with vertices first
     for i in 1:nvg
         push!(new_nodes,Int[])
-        sizehint(new_nodes[i], length(inn[i]))
+        sizehint!(new_nodes[i], length(inn[i]))
         # Create as many new vertices as there are edges into the original vertex
         for j = 1:length(inn[i])
             id = add_vertex!(newGraph)
@@ -469,7 +469,7 @@ end
     k = real_dsts[dst]
     # Initialize path in modified graph (only keep last vertex)
     previousActualPathNode = k
-    sizehint(pathNodes, 100)
+    sizehint!(pathNodes, 100)
     # Look for path in previous matrix
     l = 0
     while old_nodes[k] != src
