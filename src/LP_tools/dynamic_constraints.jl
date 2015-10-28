@@ -55,7 +55,7 @@ function updateConstraints(
 	# Remove worst constraints
 	# TODO
 	# Select new constraints
-	indicesVector = (Int,Int)[]
+	indicesVector = Tuple{Int,Int}[]
 	sizehint!(indicesVector, 12000000)
 	for i = 1:size(travelTimes)[1], j = 1:size(travelTimes)[1]
 		if travelTimes[i,j] > 0
