@@ -83,9 +83,10 @@ end
     function multiDijkstraInstance(nodes::UnitRange{Int})
         return partialShortestPathsWithTurns(n, new_n, nodes, newRoadTime, new_nodes)
     end
-    @everywhere gc()
+
     # Call pmap on wrapper function
-    results = pmap(multiDijkstraInstance, locations)
+    results = map(multiDijkstraInstance, locations)
+    # println(results[1])
 
     # Process output of pmap and return
     for i in 1:length(results)
@@ -476,7 +477,7 @@ end
         l += 1
         k = previous[k]
         # Check if edge was modified (i.e. by presence of left turn)
-        if bool(int(new_edge_isExpensive[k, previousActualPathNode]))
+        if round(Int, new_edge_isExpensive[k, previousActualPathNode]) != 0
             expensiveTurns += 1
         end
         # Add node to path

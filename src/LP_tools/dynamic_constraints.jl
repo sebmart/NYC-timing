@@ -42,7 +42,9 @@ function updateConstraints(
 	dsts::Array{Int, 1},
 	pairs::Array{Array{Int, 1}, 1};
 	numNodePairsToAdd::Int = 0,
-	numNodePairsToRemove::Int = 0)
+	numNodePairsToRemove::Int = 0,
+	selectionRule::Float64 = 0.9)
+
 	newSrcs = deepcopy(srcs)
 	newDsts = deepcopy(dsts)
 	newPairs = deepcopy(pairs)
@@ -52,8 +54,6 @@ function updateConstraints(
 
 	# Create lookup set for constraints already under consideration
 	nodePairsAlreadyIn = Set([(srcs[i], dsts[i]) for i = 1:length(srcs)])
-	# Remove worst constraints
-	# TODO
 	# Select new constraints
 	indicesVector = Tuple{Int,Int}[]
 	sizehint!(indicesVector, 12000000)
@@ -69,7 +69,7 @@ function updateConstraints(
 	end
 	# sort
 	p = sortperm(errorVector)
-	startIndex = int(round(0.9 * length(indicesVector)))
+	startIndex = round(Int, selectionRule * length(indicesVector))
 	i = 0
 	count = 0
 	while i < startIndex - 1 && count < numNodePairsToAdd

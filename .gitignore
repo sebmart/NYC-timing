@@ -2,6 +2,7 @@
 *.jld
 *.txt
 *.lp
+*.json
 .DS_Store
 src/Cities/
 src/Outputs/

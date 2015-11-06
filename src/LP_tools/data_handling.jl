@@ -140,10 +140,7 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 		println("--Constructing KDTree")
 		@time treeL = KDTree(treeL)
 		for i = 1:length(nodePositions), j=1:length(nodePositions)
-			if i % 500 == 0
-				println(i)
-			end
-			if i != j
+			if !(i in highwayNodes) && !(j in highwayNodes) && i != j
 				vec = [nodePositions[i].x, nodePositions[i].y, nodePositions[j].x, nodePositions[j].y]
 				index = inball(treeL, vec, float(radius))
 				for idx in index
@@ -163,7 +160,7 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::Abstrac
 	"""
 	println("**** Loading training and testing sets ****")
 	# Select file name
-	fileName = "../Ride_data/$(year)/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)"
+	fileName = "../Ride_data/$(year)/Input_travel_times/travel_times_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_r$(radius)_$(method)"
 	if weekdays
 		fileName = string(fileName, "_wd")
 	else

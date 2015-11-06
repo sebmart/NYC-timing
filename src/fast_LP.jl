@@ -4,9 +4,9 @@
 
 MODEL = "relaxed_smooth"		# relaxed/strict _ smooth/nothing/random
 LAST_SMOOTH = false 			# true if last iteration is smooth, false otherwise. Irrelevant if model is smooth already.
-ERROR_COMPUTATION = "both" 		# average/single-ride/both
+ERROR_COMPUTATION = "average" 		# average/single-ride/both
 
-MAX_ROUNDS = 5					# max number of iterations
+MAX_ROUNDS = 2					# max number of iterations
 
 MIN_RIDES = 1					# min number of rides
 RADIUS = 140					# radius (4D Euclidian)
@@ -58,7 +58,7 @@ function fast_LP(
 	sample_size::Int=SAMPLE_SIZE,
 	turnCost::Float64=TURN_COST,
 	turnCostAsVariable::Bool=TURN_COST_AS_VARIABLE,
-	delta_bound::Array{Float64}=DELTA_BOUND,
+	delta_bound::Union{Array{Float64,1},Array{Any,1}}=DELTA_BOUND,
 	maxNumPathsPerOD::Int=MAX_NUM_PATHS_PER_OD,
 	computeFinalSP::Bool = COMPUTE_FINAL_SHORTEST_PATHS,
 	startWithSimpleLP::Bool=START_SIMPLE,
@@ -397,17 +397,21 @@ function fast_LP(
 				if errorComputation == "single-ride"
 					@time avg_sq_err, avg_rel_err, avg_bias = computeTestingError(testingData, nodeTree, nodePairs, new_sp.traveltime, method)
 					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
+					flush(errorFile)
 				elseif errorComputation == "average"
 					@time avg_sq_err, avg_rel_err, avg_bias = computeAverageTestingError(testingData, new_sp.traveltime, num_nodes=nv(graph))
 					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias,"\n"))
+					flush(errorFile)
 				elseif errorComputation == "both"
 					@time avg_sq_err, avg_rel_err, avg_bias = computeTestingError(testingData, nodeTree, nodePairs, new_sp.traveltime, method)
 					@time avg_sq_err_2, avg_rel_err_2, avg_bias_2 = computeAverageTestingError(testingData2, new_sp.traveltime, num_nodes=nv(graph))
 					write(errorFile, string(l, ",", avg_sq_err, ",", avg_rel_err, ",", avg_bias, ",", avg_sq_err_2, ",", avg_rel_err_2, ",", avg_bias_2,"\n"))
+					flush(errorFile)
 				end
 			end
 			if dynamicConstraints
 				write(numConstraintsFile, string(l,",",length(srcs), "\n"))
+				flush(numConstraintsFile)
 				if l < max_rounds && l % iterationMultiple == 0
 					println("**** Updating constraint set ****")
 					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd)
@@ -416,6 +420,7 @@ function fast_LP(
 			end
 		end
 		write(timeFile, string(l, ",", toc(), "\n"))
+		flush(timeFile)
 		l += 1
 	end
 	println("-- Saved outputs to directory Outputs/$(TESTDIR)/")
@@ -430,18 +435,18 @@ function fast_LP(
 	if dynamicConstraints
 		close(numConstraintsFile)
 	end
-	return status, newTimes
+	return status, newTimes, "Outputs/$TESTDIR/"
 end
 
-manhattan = loadCityGraph()
-travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, METHOD, year=YEAR, startTime=START_TIME, endTime=END_TIME, startMonth=START_MONTH, endMonth=END_MONTH, radius = RADIUS)
-if RANDOM_CONSTRAINTS
-	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
-end
-if ERROR_COMPUTATION == "single-ride"
-	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime)
-elseif ERROR_COMPUTATION == "average"
-	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_travel_times, manhattan.roadTime)
-elseif ERROR_COMPUTATION == "both"
-	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime, testingData2 = testing_travel_times)
-end
+# manhattan = loadCityGraph()
+# travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, METHOD, year=YEAR, startTime=START_TIME, endTime=END_TIME, startMonth=START_MONTH, endMonth=END_MONTH, radius = RADIUS)
+# if RANDOM_CONSTRAINTS
+# 	travel_times, num_rides = chooseConstraints(travel_times, num_rides, sample_size=SAMPLE_SIZE);
+# end
+# if ERROR_COMPUTATION == "single-ride"
+# 	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime)
+# elseif ERROR_COMPUTATION == "average"
+# 	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, testing_travel_times, manhattan.roadTime)
+# elseif ERROR_COMPUTATION == "both"
+# 	@time status, new_times = fast_LP(manhattan, travel_times, num_rides, trainTestDf, manhattan.roadTime, testingData2 = testing_travel_times)
+# end
