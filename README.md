@@ -3,6 +3,7 @@
 Code for travel time estimation from taxi ride data.
 
 ## Workflow
+#### Interactive mode
 - Start julia with required number of cores (usually 8 or more): 
 ```bash
 $ julia -p 8
@@ -15,6 +16,17 @@ julia> include("intro.jl")
 ```julia
 julia> include("fast_LP.jl")
 ```
+#### Using qsub
+- Load parameter files that you want to run by first editing src/params.jl, then running
+```bash
+julia params.jl
+```
+This creates a parameter file in the JSONparams/ directory.
+- Choose desired parameter files by listing them in JSONparams/paramList.txt
+- Submit jobs
+```bash
+./script.sh
+```
 
 ## File index
 Files not listed here but present in repository are not useful.
@@ -22,6 +34,10 @@ Files not listed here but present in repository are not useful.
 - src/intro.jl: Loads all dependencies and helper functions into memory
 - src/fast_LP.jl: Run LP methods (more detailed description below)
 - src/simple_LP.jl: Simple one-variable LP (to be used as initial step for main method)
+- src/call_fast_LP.jl: Self-contained LP calling file, called by bash script to be fed directly into computing grid. Prameters are read from JSON file.
+- src/juliaCall.sh: bash subroutine that calls call_fast_LP.jl
+- src/script.sh: reads list of parameter files, submits a job for each one
+- src/params.jl: creates JSON file for desired parameters
 
 #### Helper files
 - src/LP_tools/LP_tools.jl: miscellaneous helper functions (especially saving output and error info to files)
