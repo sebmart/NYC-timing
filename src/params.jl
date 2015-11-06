@@ -26,6 +26,7 @@ PARAMS = Dict(
 "SAMPLE_SIZE" => 10000, 				# starting number of constraints
 "NUM_OD_ADDED" => 1000,				# number of (O,D) pairs to add
 "UPDATE_EVERY_N_ITERATIONS" => 1, 	# add number of (O,D) above every $N iterations
+"SELECTION_RULE_CUTOFF" => 0.9		# Value must be between 0. and 1., default is 0.9
 
 "TURN_COST" => 0.,	 				# turning cost initial value
 "TURN_COST_AS_VARIABLE" => false, 	# true if LP updates turning cost, false otw

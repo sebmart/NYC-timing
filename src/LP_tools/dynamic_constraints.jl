@@ -43,7 +43,7 @@ function updateConstraints(
 	pairs::Array{Array{Int, 1}, 1};
 	numNodePairsToAdd::Int = 0,
 	numNodePairsToRemove::Int = 0,
-	selectionRule::Float64 = 0.9)
+	selectionRuleCutoff::Float64 = 0.9)
 
 	newSrcs = deepcopy(srcs)
 	newDsts = deepcopy(dsts)
@@ -69,7 +69,7 @@ function updateConstraints(
 	end
 	# sort
 	p = sortperm(errorVector)
-	startIndex = round(Int, selectionRule * length(indicesVector))
+	startIndex = round(Int, selectionRuleCutoff * length(indicesVector))
 	i = 0
 	count = 0
 	while i < startIndex - 1 && count < numNodePairsToAdd

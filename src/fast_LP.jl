@@ -23,6 +23,7 @@ DYNAMIC_CONSTRAINTS = true 		# true for dynamic constraints, false otw
 SAMPLE_SIZE = 1000 				# starting number of constraints
 NUM_OD_ADDED = 1000 			# number of (O,D) pairs to add
 UPDATE_EVERY_N_ITERATIONS = 1 	# add number of (O,D) above every $N iterations
+SELECTION_RULE_CUTOFF = 0.9		# Value must be between 0. and 1., default is 0.9
 
 TURN_COST = 0.	 				# turning cost initial value
 TURN_COST_AS_VARIABLE = false 	# true if LP updates turning cost, false otw
@@ -66,6 +67,7 @@ function fast_LP(
 	dynamicConstraints::Bool=DYNAMIC_CONSTRAINTS,
 	numPairsToAdd::Int = NUM_OD_ADDED,
 	iterationMultiple::Int = UPDATE_EVERY_N_ITERATIONS,
+	selectionRuleCutoff::Float64 = SELECTION_RULE_CUTOFF,
 	metropolis::Bool=METROPOLIS,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
@@ -99,7 +101,7 @@ function fast_LP(
 	if randomConstraints
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
 	elseif dynamicConstraints
-		TESTDIR=string(TESTDIR, "_dynConstr_st$(sample_size)_add$(numPairsToAdd)_every$(iterationMultiple)")
+		TESTDIR=string(TESTDIR, "_dynConstr_st$(sample_size)_add$(numPairsToAdd)_every$(iterationMultiple)_sc$(selectionRuleCutoff)")
 	end
 	if turnCostAsVariable
 		TESTDIR=string(TESTDIR, "_tcvar_start$(turnCost)")
@@ -414,7 +416,7 @@ function fast_LP(
 				flush(numConstraintsFile)
 				if l < max_rounds && l % iterationMultiple == 0
 					println("**** Updating constraint set ****")
-					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd)
+					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd, selectionRuleCutoff=selectionRuleCutoff)
 					numDataPoints = length(srcs)
 				end
 			end
