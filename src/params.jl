@@ -9,7 +9,7 @@ PARAMS = Dict(
 "LAST_SMOOTH" => false, 			# true if last iteration is smooth, false otherwise. Irrelevant if model is smooth already.
 "ERROR_COMPUTATION" => "both", 		# average/single-ride/both
 
-"MAX_ROUNDS" => 41,					# max number of iterations
+"MAX_ROUNDS" => 50,					# max number of iterations
 
 "MIN_RIDES" => 1,					# min number of rides
 "RADIUS" => 200,					# radius (4D Euclidian)
@@ -23,10 +23,10 @@ PARAMS = Dict(
 
 "RANDOM_CONSTRAINTS" => false, 		# true for purely random constraints, false otw
 "DYNAMIC_CONSTRAINTS" => true, 		# true for dynamic constraints, false otw
-"SAMPLE_SIZE" => 10000, 				# starting number of constraints
-"NUM_OD_ADDED" => 1000,				# number of (O,D) pairs to add
-"UPDATE_EVERY_N_ITERATIONS" => 1, 	# add number of (O,D) above every $N iterations
-"SELECTION_RULE_CUTOFF" => 0.9		# Value must be between 0. and 1., default is 0.9
+"SAMPLE_SIZE" => 1000, 				# starting number of constraints
+"NUM_OD_ADDED" => 2500,				# number of (O,D) pairs to add
+"UPDATE_EVERY_N_ITERATIONS" => 2, 	# add number of (O,D) above every $N iterations
+"SELECTION_RULE_CUTOFF" => 0.9,		# Value must be between 0. and 1., default is 0.9
 
 "TURN_COST" => 0.,	 				# turning cost initial value
 "TURN_COST_AS_VARIABLE" => false, 	# true if LP updates turning cost, false otw
