@@ -3,6 +3,7 @@
 *.txt
 *.lp
 *.json
+*.log
 .DS_Store
 src/Cities/
 src/Outputs/
