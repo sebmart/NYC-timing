@@ -22,8 +22,7 @@ t=time()
 JSONfile, params = load_parameters()
 # Load Manhattan
 manhattan = loadCityGraph()
-startTimes = load("Outputs/fast_r200_minr1_i100_wd_1214_m112_y2013_relaxed_smooth_ppc3_dataaverage_errorboth_dynConstr_st1000_add1000_every1_tc0.0/manhattan-times-100.jld", "times")
-# startTimes = manhattan.roadTime
+startTimes = manhattan.roadTime
 # Load data
 travel_times, num_rides, trainTestDf, testing_travel_times, testing_num_rides, testDf = loadInputTravelTimes(manhattan.positions, params["METHOD"], year=params["YEAR"], startTime=params["START_TIME"], endTime=params["END_TIME"], startMonth=params["START_MONTH"], endMonth=params["END_MONTH"], radius = params["RADIUS"])
 # Choose constraints if random
