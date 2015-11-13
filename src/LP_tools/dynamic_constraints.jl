@@ -126,7 +126,7 @@ function updatePaths(
 	totalNumExpensiveTurns::Array{Any,1},
 	numPaths::Array{Int, 1};
 	maxNumPathsPerOD::Int=3,
-	times::AbstractArray{Float64,2},
+	times::AbstractArray{Float64,2}=zeros(1,1),
 	turnCost::Float64=0.0,
 	travelTimes::AbstractArray{Float64,2}=zeros(1,1),
 	numRides::AbstractArray{Int,2}=zeros(Int,(1,1)),
@@ -172,7 +172,7 @@ function updatePaths(
 				end
 			end
 			for i=1:length(indicesVector)
-				errorVector[i] = abs(sum([times[totalPaths[indicesVector[i][1]][indicesVector[i][2]][a], totalPaths[indicesVector[i][1]][indicesVector[i][2]][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][indicesVector[i][2]])-1)]) + totalNumExpensiveTurns[indicesVector[i][1]][indicesVector[i][2]] * turnCost - travelTimes[indicesVector[i][3],indicesVector[i][4]]) * sqrt(numRides[indicesVector[i][3], indicesVector[i][4]]/travelTimes[indicesVector[i][3], indicesVector[i][4]])
+				errorVector[i] = abs(sum([times[totalPaths[indicesVector[i][1]][indicesVector[i][2]][a], totalPaths[indicesVector[i][1]][indicesVector[i][2]][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][indicesVector[i][2]])-1)]) + totalNumExpensiveTurns[indicesVector[i][1]][indicesVector[i][2]] * turnCost - sum([times[totalPaths[indicesVector[i][1]][1][a], totalPaths[indicesVector[i][1]][1][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][1])-1)]) - totalNumExpensiveTurns[indicesVector[i][1]][1] * turnCost)/(travelTimes[indicesVector[i][3], indicesVector[i][4]])
 			end
 			p = sortperm(errorVector)
 			numPathsToRemove = maxNumPathsPerOD * length(totalPaths) - nPaths
