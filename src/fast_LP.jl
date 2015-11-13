@@ -20,10 +20,13 @@ METHOD = "average"				# average/nearest [neighbor]
 
 RANDOM_CONSTRAINTS = false 		# true for purely random constraints, false otw
 DYNAMIC_CONSTRAINTS = true 		# true for dynamic constraints, false otw
+GLOBAL_CONSTRAINT_UPDATE = false # true if we remove worst paths globally, false otw
 SAMPLE_SIZE = 1000 				# starting number of constraints
 NUM_OD_ADDED = 1000 			# number of (O,D) pairs to add
+NUM_OD_REMOVED = 1000			# number of (O,D) pairs to remove
 UPDATE_EVERY_N_ITERATIONS = 1 	# add number of (O,D) above every $N iterations
-SELECTION_RULE_CUTOFF = 0.9		# Value must be between 0. and 1., default is 0.9
+ADD_IF_ABOVE_PERCENTILE = 0.7		# only add rides that have an error above this percentile
+REMOVE_IF_BELOW_PERCENTILE = 0.3	# only remove rides that have an error below this percentile
 
 TURN_COST = 0.	 				# turning cost initial value
 TURN_COST_AS_VARIABLE = false 	# true if LP updates turning cost, false otw
@@ -66,8 +69,11 @@ function fast_LP(
 	randomConstraints::Bool=RANDOM_CONSTRAINTS,
 	dynamicConstraints::Bool=DYNAMIC_CONSTRAINTS,
 	numPairsToAdd::Int = NUM_OD_ADDED,
+	numPairsToRemove::Int = NUM_OD_REMOVED,
 	iterationMultiple::Int = UPDATE_EVERY_N_ITERATIONS,
-	selectionRuleCutoff::Float64 = SELECTION_RULE_CUTOFF,
+	addOnlyIfAbovePercentile::Float64 = ADD_IF_ABOVE_PERCENTILE,
+	removeOnlyIfBelowPercentile::Float64 = REMOVE_IF_BELOW_PERCENTILE,
+	globalConstraintUpdate::Bool=GLOBAL_CONSTRAINT_UPDATE,
 	metropolis::Bool=METROPOLIS,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
@@ -101,7 +107,10 @@ function fast_LP(
 	if randomConstraints
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
 	elseif dynamicConstraints
-		TESTDIR=string(TESTDIR, "_dynConstr_st$(sample_size)_add$(numPairsToAdd)_every$(iterationMultiple)_sc$(selectionRuleCutoff)")
+		TESTDIR=string(TESTDIR, "_dynConstr_st$(sample_size)_add$(numPairsToAdd)_thr$(addOnlyIfAbovePercentile)_rem$(numPairsToRemove)_thr$(removeOnlyIfBelowPercentile)_every$(iterationMultiple)")
+	end
+	if globalConstraintUpdate
+		TESTDIR=string(TESTDIR, "_gcu")
 	end
 	if turnCostAsVariable
 		TESTDIR=string(TESTDIR, "_tcvar_start$(turnCost)")
@@ -241,40 +250,15 @@ function fast_LP(
 			paths, numExpensiveTurns = reconstructMultiplePathsWithExpensiveTurns(new_sp.previous, srcs, dsts, old_nodes, new_sp.real_destinations, new_edge_isExpensive)
 			println("---Updating path array")
 		end
-		for i=1:numDataPoints
-			if !(startWithSimpleLP) || l > 1
-				index = findfirst(totalPaths[i], paths[i])
-				# If path already in paths
-				if index != 0
-					totalPaths[i][1], totalPaths[i][index] = totalPaths[i][index], totalPaths[i][1]
-					totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][index] = totalNumExpensiveTurns[i][index], totalNumExpensiveTurns[i][1]			# New path is equality constraint
-				# If we still have space to add the path
-				elseif numPaths[i] < maxNumPathsPerOD
-					numPaths[i] += 1
-					if numPaths[i] == 1
-						push!(totalPaths[i], paths[i])
-						push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
-					else
-						push!(totalPaths[i], paths[i])
-						push!(totalNumExpensiveTurns[i], numExpensiveTurns[i])
-						assert(numPaths[i] == length(totalPaths[i]))
-						totalPaths[i][numPaths[i]], totalPaths[i][1] = totalPaths[i][1], totalPaths[i][numPaths[i]]
-						totalNumExpensiveTurns[i][numPaths[i]], totalNumExpensiveTurns[i][1] = totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][numPaths[i]]
-					end
-				# If we need to remove a path
-				else
-					worstIndex = findWorstPathIndex(totalPaths[i], totalNumExpensiveTurns[i], turnCost, newTimes)
-					if worstIndex == 1
-						totalPaths[i][1] = paths[i]
-						totalNumExpensiveTurns[i][1] = numExpensiveTurns[i]
-					else
-						totalPaths[i][1], totalPaths[i][worstIndex] = paths[i], totalPaths[i][1]
-						totalNumExpensiveTurns[i][1], totalNumExpensiveTurns[i][worstIndex] = numExpensiveTurns[i], totalNumExpensiveTurns[i][1]
-					end
-				end
-			else
+		# Update paths
+		if !(startWithSimpleLP) || l > 1
+			totalPaths, totalNumExpensiveTurns, numPaths = updatePaths(paths, numExpensiveTurns, totalPaths, totalNumExpensiveTurns, numPaths, maxNumPathsPerOD=maxNumPathsPerOD, times=newTimes, turnCost=turnCost, travelTimes=travelTimes, numRides=numRides, srcs=srcs, dsts=dsts, dynamicConstraints=dynamicConstraints, globalConstraintUpdate=globalConstraintUpdate)
+		else
+			for i = 1:numDataPoints
 				numPaths[i] = length(totalPaths[i])
 			end
+		end
+		for i=1:numDataPoints
 			# Add inequality constraints
 			if numPaths[i] > 1
 				for j = 1:(numPaths[i]-1)
@@ -416,7 +400,7 @@ function fast_LP(
 				flush(numConstraintsFile)
 				if l < max_rounds && l % iterationMultiple == 0
 					println("**** Updating constraint set ****")
-					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd, selectionRuleCutoff=selectionRuleCutoff)
+					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd, numNodePairsToRemove = numPairsToRemove, addOnlyIfAbovePercentile = addOnlyIfAbovePercentile, removeOnlyIfBelowPercentile = removeOnlyIfBelowPercentile)
 					numDataPoints = length(srcs)
 				end
 			end
