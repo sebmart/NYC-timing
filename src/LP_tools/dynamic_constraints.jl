@@ -163,7 +163,6 @@ function updatePaths(
 		# Check if paths need to be removed, and if so, remove them
 		nPaths = sum(numPaths)
 		if nPaths < maxNumPathsPerOD * length(totalPaths)
-			errorVector = zeros(nPaths)
 			indicesVector = Tuple{Int,Int,Int,Int}[]
 			sizehint!(indicesVector, nPaths)
 			for i = 1:length(totalPaths), j=1:numPaths[i]
@@ -171,6 +170,7 @@ function updatePaths(
 					push!(indicesVector, (i,j,srcs[i],dsts[i]))
 				end
 			end
+			errorVector = zeros(length(indicesVector))
 			if length(indicesVector) > 0
 				for i=1:length(indicesVector)
 					errorVector[i] = abs(sum([times[totalPaths[indicesVector[i][1]][indicesVector[i][2]][a], totalPaths[indicesVector[i][1]][indicesVector[i][2]][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][indicesVector[i][2]])-1)]) + totalNumExpensiveTurns[indicesVector[i][1]][indicesVector[i][2]] * turnCost - sum([times[totalPaths[indicesVector[i][1]][1][a], totalPaths[indicesVector[i][1]][1][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][1])-1)]) - totalNumExpensiveTurns[indicesVector[i][1]][1] * turnCost)/(travelTimes[indicesVector[i][3], indicesVector[i][4]])
