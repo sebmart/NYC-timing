@@ -6,7 +6,7 @@ for fileName in `cat JSONparams/paramList.txt`
 do
 	JSONfileName="JSONparams/"$fileName
 	outputFileName="Log_files/out_"${fileName%.json}".log"
-	if [ -f $FILE ];
+	if [ -f $outputFileName ];
 	then
 		rm $outputFileName
 	fi
