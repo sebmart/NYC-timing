@@ -143,6 +143,10 @@ function updatePaths(
 	"""
 	Update path array so as not to exceed max number of paths.
 	"""
+	newTotalPaths = [totalPaths[i] for i = 1:length(totalPaths)]
+	newTotalNumExpensiveTurns = [totalNumExpensiveTurns[i] for i = 1:length(totalNumExpensiveTurns)]
+	totalPaths = newTotalPaths
+	totalNumExpensiveTurns = newTotalNumExpensiveTurns
 	if dynamicConstraints && globalConstraintUpdate
 		# Deal with single path per O,D case separately because of the bugs it's been causing
 		if maxNumPathsPerOD > 1
@@ -205,9 +209,6 @@ function updatePaths(
 					totalNumExpensiveTurns = [[totalNumExpensiveTurns[i][j] for j in pathsToKeep[i]] for i = 1:length(totalNumExpensiveTurns)]
 					numPaths = [length(pathsToKeep[i]) for i = 1:length(numPaths)]
 				end
-			else
-				totalPaths = [[totalPaths[i][j] for j in 1:length(totalPaths[i])] for i = 1:length(totalPaths)]
-				totalNumExpensiveTurns = [[totalNumExpensiveTurns[i][j] for j in 1:length(totalNumExpensiveTurns[i])] for i = 1:length(totalNumExpensiveTurns)]
 			end
 		else
 			# Recreate path and turn arrays from scratch (since we will overwrite all their contents anyways)
