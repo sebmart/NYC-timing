@@ -162,7 +162,7 @@ function updatePaths(
 		end
 		# Check if paths need to be removed, and if so, remove them
 		nPaths = sum(numPaths)
-		if nPaths < maxNumPathsPerOD * length(totalPaths)
+		if nPaths > maxNumPathsPerOD * length(totalPaths)
 			indicesVector = Tuple{Int,Int,Int,Int}[]
 			sizehint!(indicesVector, nPaths)
 			for i = 1:length(totalPaths), j=1:numPaths[i]
@@ -176,8 +176,9 @@ function updatePaths(
 					errorVector[i] = abs(sum([times[totalPaths[indicesVector[i][1]][indicesVector[i][2]][a], totalPaths[indicesVector[i][1]][indicesVector[i][2]][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][indicesVector[i][2]])-1)]) + totalNumExpensiveTurns[indicesVector[i][1]][indicesVector[i][2]] * turnCost - sum([times[totalPaths[indicesVector[i][1]][1][a], totalPaths[indicesVector[i][1]][1][a+1]] for a = 1:(length(totalPaths[indicesVector[i][1]][1])-1)]) - totalNumExpensiveTurns[indicesVector[i][1]][1] * turnCost)/(travelTimes[indicesVector[i][3], indicesVector[i][4]])
 				end
 				p = sortperm(errorVector)
-				numPathsToRemove = maxNumPathsPerOD * length(totalPaths) - nPaths
+				numPathsToRemove = nPaths - maxNumPathsPerOD * length(totalPaths)
 				pathsToKeep = [collect(1:numPaths[i]) for i=1:length(numPaths)]
+				println(numPathsToRemove)
 				for i = 1:numPathsToRemove
 					idx = findfirst(pathsToKeep[indicesVector[p[end+1-i]][1]], indicesVector[p[end+1-i]][2])
 					splice!(pathsToKeep[indicesVector[p[end+1-i]][1]], idx)
