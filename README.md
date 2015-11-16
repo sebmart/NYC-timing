@@ -47,12 +47,11 @@ Files not listed here but present in repository are not useful.
 - src/LP_tools/load_constraints.jl: contained functions to load Manhattan and taxi data into memory. Now only used to load Manhattan (all data loading handled by data_handling.jl)
 - src/LP_tools/manhattan.jl: copied from TaxiSimulation with a couple of additions (like ability to create an empty Manhattan object)
 - src/LP_tools/parallel_tools.jl: helper functions for parallelized operations (shortest path computations)
-- src/LP_tools/preprocess.jl: clustering of data. Deprecated.
-- src/LP_tools/runTest.jl: error computations. Semi-deprecated by data_handling.jl
+- src/LP_tools/preprocess.jl: clustering of data. Deprecated but kept because of potential usefulness.
 - src/LP_tools/shortestpath.jl: copied from TaxiSimulation
 
 #### Metropolis
-- test/fast_LP_test.jl: wrapper function calls fast_LP on metropolis
+- test/fast_LP_test.jl: wrapper function calls fast_LP on metropolis. fast_LP has changed a lot since this was last updated, so a fair amount of work needs to be done to make this work again. On the plus side, this will mostly require listing appropriate parameters
 - test/loadMetropolis.jl: used to generate different metropolises, synthetic data
 - test/metropolis_intro.jl: loads dependencies for metropolis
 
@@ -61,4 +60,4 @@ Files not listed here but present in repository are not useful.
 - visualizer/algorithmOutput.jl: visualize algorithm results on Manhattan
 
 ## LP parameters
-At the top of fast_LP.jl, there is a (very) long list of parameters to be fed into the method. This is inelegant but clear. Users should take time to familiarize themselves with these parameters.
+At the top of fast_LP.jl, there is a (very) long list of parameters to be fed into the method. This is inelegant but clear. Users should take time to familiarize themselves with these parameters. Parameters are specified in params.jl. Running params.jl will create a single parameter file that can then be used as input to the LP.
