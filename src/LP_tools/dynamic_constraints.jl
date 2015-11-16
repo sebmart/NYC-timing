@@ -178,7 +178,6 @@ function updatePaths(
 				p = sortperm(errorVector)
 				numPathsToRemove = nPaths - maxNumPathsPerOD * length(totalPaths)
 				pathsToKeep = [collect(1:numPaths[i]) for i=1:length(numPaths)]
-				println(numPathsToRemove)
 				for i = 1:numPathsToRemove
 					idx = findfirst(pathsToKeep[indicesVector[p[end+1-i]][1]], indicesVector[p[end+1-i]][2])
 					splice!(pathsToKeep[indicesVector[p[end+1-i]][1]], idx)
