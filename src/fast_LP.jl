@@ -253,6 +253,9 @@ function fast_LP(
 		# Update paths
 		if !(startWithSimpleLP) || l > 1
 			totalPaths, totalNumExpensiveTurns, numPaths = updatePaths(paths, numExpensiveTurns, totalPaths, totalNumExpensiveTurns, numPaths, maxNumPathsPerOD=maxNumPathsPerOD, times=newTimes, turnCost=turnCost, travelTimes=travelTimes, numRides=numRides, srcs=srcs, dsts=dsts, dynamicConstraints=dynamicConstraints, globalConstraintUpdate=globalConstraintUpdate)
+			println("Type check: ")
+			println(typeof(totalPaths))
+			println(typeof(numExpensiveTurns))
 		else
 			for i = 1:numDataPoints
 				numPaths[i] = length(totalPaths[i])
@@ -401,6 +404,9 @@ function fast_LP(
 				if l < max_rounds && l % iterationMultiple == 0
 					println("**** Updating constraint set ****")
 					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd, numNodePairsToRemove = numPairsToRemove, addOnlyIfAbovePercentile = addOnlyIfAbovePercentile, removeOnlyIfBelowPercentile = removeOnlyIfBelowPercentile)
+					println("Type check: ")
+					println(typeof(totalPaths))
+					println(typeof(numExpensiveTurns))
 					numDataPoints = length(srcs)
 				end
 			end
