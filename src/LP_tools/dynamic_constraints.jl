@@ -125,9 +125,9 @@ function updateConstraints(
 end
 
 function updatePaths(
-	paths::Union{Array{Any, 1}, Array{Array{Int,1},1}},
+	paths::Array{Any, 1},
 	numExpensiveTurns::Array{Int,1},
-	totalPaths::Union{Array{Any, 1}, Array{Array{Int,1},1}},
+	totalPaths::Array{Any, 1},
 	totalNumExpensiveTurns::Array{Any,1},
 	numPaths::Array{Int, 1};
 	maxNumPathsPerOD::Int=3,
