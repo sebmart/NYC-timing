@@ -125,7 +125,7 @@ function updateConstraints(
 end
 
 function updatePaths(
-	paths::Array{Any, 1},
+	paths::Array{Array{Int64,1}, 1},
 	numExpensiveTurns::Array{Int,1},
 	totalPaths::Array{Any, 1},
 	totalNumExpensiveTurns::Array{Any,1},
