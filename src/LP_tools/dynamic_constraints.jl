@@ -205,8 +205,8 @@ function updatePaths(
 						splice!(pathsToKeep[indicesVector[p[end+1-i]][1]], idx)
 					end
 					# Rebuild path arrays using pathsToKeep to filter out removed paths
-					totalPaths = [[totalPaths[i][j] for j in pathsToKeep[i]] for i = 1:length(totalPaths)]
-					totalNumExpensiveTurns = [[totalNumExpensiveTurns[i][j] for j in pathsToKeep[i]] for i = 1:length(totalNumExpensiveTurns)]
+					totalPaths = [totalPaths[i][pathsToKeep[i]] for i = 1:length(totalPaths)]
+					totalNumExpensiveTurns = [totalNumExpensiveTurns[i][pathsToKeep[i]] for i = 1:length(totalNumExpensiveTurns)]
 					numPaths = [length(pathsToKeep[i]) for i = 1:length(numPaths)]
 				end
 			end
