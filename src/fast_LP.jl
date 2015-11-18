@@ -41,6 +41,8 @@ START_SIMPLE = false 			# true if initial simple LP is used, false otw
 
 METROPOLIS = false 				# always set this to false unless you wish to crash everything
 
+WARMSTART = false
+
 function fast_LP(
 	manhattan::Manhattan,
 	travelTimes::Array{Float64,2},
@@ -74,6 +76,7 @@ function fast_LP(
 	addOnlyIfAbovePercentile::Float64 = ADD_IF_ABOVE_PERCENTILE,
 	removeOnlyIfBelowPercentile::Float64 = REMOVE_IF_BELOW_PERCENTILE,
 	globalConstraintUpdate::Bool=GLOBAL_CONSTRAINT_UPDATE,
+	warmstart::Bool=WARMSTART,
 	metropolis::Bool=METROPOLIS,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
@@ -99,10 +102,14 @@ function fast_LP(
 	end
 
 	# Create output directory name (sorry this is so complicated)
-	if !(last_smooth)
+	if ((!last_smooth) && (!metropolis))
 		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_y$(year)_$(model_type)_ppc$(maxNumPathsPerOD)_data$(method)_error$errorComputation"
-	else
+	elseif last_smooth && (!metropolis)
 		TESTDIR = "fast_r$(radius)_minr$(min_rides)_i$(max_rounds)_wd_$(startTime)$(endTime)_m$(startMonth)$(endMonth)_y$(year)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)_data$(method)_error$errorComputation"
+	elseif (!last_smooth) && metropolis
+		TESTDIR = "fast_metropolis$(prob)_minr$(min_rides)_i$(max_rounds)_$(model_type)_ppc$(maxNumPathsPerOD)"
+	elseif last_smooth && metropolis
+		TESTDIR = "fast_metropolis$(prob)_minr$(min_rides)_i$(max_rounds)_$(model_type)_lsmooth_ppc$(maxNumPathsPerOD)"
 	end
 	if randomConstraints
 		TESTDIR=string(TESTDIR, "_rnd_rides$(sample_size)")
@@ -120,8 +127,8 @@ function fast_LP(
 	if startWithSimpleLP
 		TESTDIR=string(TESTDIR, "_ss")
 	end
-	if metropolis
-		TESTDIR=string(TESTDIR, "_metropolis$(prob)")
+	if warmstart
+		TESTDIR=string(TESTDIR, "_ws")
 	end
 
 	# Create directory if necessary:
@@ -223,7 +230,11 @@ function fast_LP(
 		m = Model(solver=GurobiSolver(TimeLimit=10000, OutputFlag=1, Method=3, BarConvTol=tolerance))
 
 		# Add one variable for each road, for each model
-		@defVar(m, t[i=nodes,j=out[i]] >= 0.038 * manhattan.distances[i,j])
+		if !metropolis
+			@defVar(m, t[i=nodes,j=out[i]] >= 0.038 * manhattan.distances[i,j])
+		else
+			@defVar(m, t[i=nodes,j=out[i]] >= startTimes[i,j])
+		end
 
 		# Add decision variable for turn cost if necessary
 		if turnCostAsVariable

@@ -43,7 +43,9 @@ PARAMS = Dict(
 
 "START_SIMPLE" => false, 				# true if initial simple LP is used, false otw
 
-"METROPOLIS" => false 					# always set this to false unless you wish to crash everything
+"METROPOLIS" => false, 					# always set this to false unless you wish to crash everything
+
+"WARMSTART" => false 					# Set to true if you want to warm start, false otherwise
 )
 
 function create_JSON_file(params::Dict{ASCIIString,Any}, fileName::AbstractString)
