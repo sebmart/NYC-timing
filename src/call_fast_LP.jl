@@ -21,7 +21,8 @@ t=time()
 JSONfile, params = load_parameters()
 # Load Manhattan
 manhattan = loadCityGraph()
-if params["WARMSTART"]
+ws = params["WARMSTART"]
+if ws
 	startTimes = load("Outputs/fast_r200_minr1_i100_wd_1214_m112_y2013_relaxed_smooth_ppc3_dataaverage_errorboth_dynConstr_st1000_add1000_every1_tc0.0/manhattan-times-100.jld", "times")
 else
 	startTimes = manhattan.roadTime

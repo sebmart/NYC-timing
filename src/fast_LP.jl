@@ -227,7 +227,7 @@ function fast_LP(
 		else
 			tolerance = 1e-6
 		end
-		m = Model(solver=GurobiSolver(TimeLimit=3000, OutputFlag=1, Method=3, BarConvTol=tolerance))
+		m = Model(solver=GurobiSolver(TimeLimit=10000, OutputFlag=1, Method=3, BarConvTol=tolerance))
 
 		# Add one variable for each road, for each model
 		if !metropolis
