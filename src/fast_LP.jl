@@ -227,7 +227,7 @@ function fast_LP(
 		else
 			tolerance = 1e-6
 		end
-		m = Model(solver=GurobiSolver(TimeLimit=10000, OutputFlag=1, Method=3, BarConvTol=tolerance))
+		m = Model(solver=GurobiSolver(TimeLimit=3000, OutputFlag=1, Method=3, BarConvTol=tolerance))
 
 		# Add one variable for each road, for each model
 		if !metropolis
@@ -361,10 +361,11 @@ function fast_LP(
 		# Debug if infeasible
 		if status == :Infeasible
 			println("!!!! Computing IIS !!!!")
+			buildInternalModel(m)
 			print_iis_gurobi(m)
 			break
 		# Prepare output
-		elseif status == :Optimal || status == :Suboptimal
+		elseif status == :Optimal || status == :Suboptimal || status == :UserLimit
 			result = getValue(t)
 			newTimes = spzeros(length(nodes), length(nodes))
 			for element in result
@@ -382,9 +383,6 @@ function fast_LP(
 			else
 				old_objective = objective
 			end
-		elseif status == :UserLimit
-			println("!!!! User time limit exceeded !!!!")
-			break
 		end
 		if l < max_rounds || computeFinalSP
 			println("**** Computing shortest paths ****")
