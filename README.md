@@ -61,3 +61,25 @@ Files not listed here but present in repository are not useful.
 
 ## LP parameters
 At the top of fast_LP.jl, there is a (very) long list of parameters to be fed into the method. This is inelegant but clear. Users should take time to familiarize themselves with these parameters. Parameters are specified in params.jl. Running params.jl will create a single parameter file that can then be used as input to the LP.
+
+## Reading outputs
+
+#### Output directories
+
+Full Gurobi output logs are not saved, so output must be read from the src/Outputs/ directory.
+The src/Outputs/ directory contains a directory for each test. Directory name specifies input parameters and is a little difficult to read at first. To see how the directory name is generated, take a look at the beginning of the fast_LP function in fast_LP.jl. Parameters for the run corresponding to an output directory are saved in parameters.json.
+
+#### Contents of an output directory
+- parameters.json: JSON file with parameters (same one used as input to qsub)
+- info.txt: extremely outdated information file (deprecated by parameters.json). Only useful information is timestamp because it specifies when the test was run.
+- timestats.csv: two-column CSV file, the first column is the iteration number, the second column is the runtime of that iteration in seconds. Last line only has a single number, which is the total runtime of all iterations.
+- numODpairs.csv: two-column CSV file, the first column is the iteration number, and the second column is the number of origin-destination pairs in the model for that iteration.
+- errorstats.csv: 7-column CSV file, these are what the columns stand for:
+
+1. Iteration number
+2. Total squared error (single-ride computation)
+3. Average absolute relative error (single-ride computation)
+4. Average bias (single-ride computation)
+5. Total squared error (averaged node computation)
+6. Average absolute relative error (averaged node computation)
+7. Average bias (averaged node computation)
