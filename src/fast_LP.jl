@@ -381,7 +381,7 @@ function fast_LP(
 			else
 				saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
 			end
-			if abs(objective - old_objective)/old_objective < 1e-3
+			if abs(objective - old_objective)/old_objective < 1e-6
 				save("Outputs/$TESTDIR/end.jld", "num_iter", l)
 				l = max_rounds
 			else
