@@ -19,8 +19,8 @@ using KDTrees
 @everywhere include("LP_tools/shortestpath.jl")
 
 include("parallel_tools.jl")
-include("LP_tools/LP_tools.jl")
-include("LP_tools/load_constraints.jl")
+include("LP_tools.jl")
+include("load_constraints.jl")
 include("LP_tools/dynamic_constraints.jl")
 include("LP_tools/data_handling.jl")
 include("simple_LP.jl")

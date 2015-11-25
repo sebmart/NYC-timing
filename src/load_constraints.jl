@@ -1,15 +1,5 @@
 # load_constraints.jl
-# Gets city information from manhattan.jld object and travel time information from Travel time CSV
-# Authored by Arthur J Delarue on 6/8/15
 
-function saveManhattan(pb::TaxiProblem, name::AbstractString; compress=false)
-  save("Cities/Saved/$name.jld", "pb", pb, compress=compress)
-end
-
-function loadManhattan(name::AbstractString)
-  pb = load("Cities/Saved/$name.jld","pb")
-  return pb
-end
 
 function saveRoadTimes(times::SparseMatrixCSC{Float64,Int}, name::AbstractString; compress=false)
   save("Outputs/$name.jld", "times", times, compress=compress)
@@ -24,19 +14,15 @@ MANHATTAN_NODES = 6134
 # Speed limits in km/h from OpenStreetMap/src/speeds.jl
 URBAN_SPEEDS = [95,72,48,32,22,12,8,5]
 
+"""
+Load city object and return it
+"""
 function loadCityGraph(;fromScratch::Bool=false, useShortestPaths::Bool=true,fixSpeeds=false)
-	"""
-	Load Manhattan object and return it
-	"""
+
 	println("**** Loading city graph ****")
 	if fromScratch
 		manhattan = Manhattan(sp=useShortestPaths)
-		# if useShortestPaths
-		# 	sp = manhattan.sp
-		# else
-		# 	sp = parallelShortestPathsAuto(manhattan.network, manhattan.roadTime, manhattan.roadCost)
-		# 	manhattan.sp = sp
-		# end
+
 		if fixSpeeds
 			# Make sure the speeds are in URBAN_SPEEDS
 			# If not match speed to closest actual speed
@@ -64,11 +50,20 @@ function loadCityGraph(;fromScratch::Bool=false, useShortestPaths::Bool=true,fix
 	return manhattan
 end
 
-function loadTravelTimeData(;radius::Int=40, times::AbstractString= "1214", min_rides::Int=4, num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64 = 50, sampleSize::Int64=10000) 
+"""
+Return array of travel times between pairs of nodes A,B obtained from NYC dataset
+"""
+function loadTravelTimeData(;
+        radius::Int=40,
+        times::AbstractString= "1214",
+        min_rides::Int=4,
+        num_nodes::Int=MANHATTAN_NODES,
+        preprocess::Bool=false,
+        num_clusters::Int64 = 50,
+        sampleSize::Int64=10000
+    )
 	# Hardcoded for simplicity. Map of Manhattan not likely to change anytime soon
-	"""
-	Return array of travel times between pairs of nodes A,B obtained from NYC dataset
-	"""
+
 	println("**** Loading travel times ****")
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
@@ -97,10 +92,22 @@ function loadTravelTimeData(;radius::Int=40, times::AbstractString= "1214", min_
 	return travelTimes
 end
 
-function loadNewTravelTimeData(;trainOrTest::AbstractString="training", radius::Int=40, times::AbstractString="1214", num_nodes::Int=MANHATTAN_NODES, preprocess::Bool=false, num_clusters::Int64=50, sampleSize::Int64=10000, min_rides::Int=4, saveTestingMatrix::Bool=false, loadTestingMatrixDirectly=false)
-	"""
-	Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well as number of rides for each node pair.
-	"""
+"""
+Return array of travel times between pairs of nodes A,B obtained from NYC dataset, as well
+as number of rides for each node pair.
+"""
+function loadNewTravelTimeData(;
+        trainOrTest::AbstractString="training",
+        radius::Int=40,
+        times::AbstractString="1214",
+        num_nodes::Int=MANHATTAN_NODES,
+        preprocess::Bool=false,
+        num_clusters::Int64=50,
+        sampleSize::Int64=10000,
+        min_rides::Int=4,
+        saveTestingMatrix::Bool=false,
+        loadTestingMatrixDirectly=false)
+
 	println("**** Loading $(trainOrTest) data ****")
 	# Load Manhattan highway nodes
 	highwayNodes = load("Cities/Saved/highwayNodes.jld", "highwayNodes")
@@ -139,10 +146,16 @@ function loadNewTravelTimeData(;trainOrTest::AbstractString="training", radius::
 	return travelTimes, numRides
 end
 
-function chooseConstraints(travelTimes::Array{Float64, 2}, numRides::Array{Int, 2}; num_nodes::Int = MANHATTAN_NODES, sample_size::Int = 5000)
-	"""
-	Given a matrix of travel times and number of rides, randomly selects sample_size nonzero entries
-	"""
+"""
+Given a matrix of travel times and number of rides, randomly selects sample_size nonzero
+entries
+"""
+function chooseConstraints(
+        travelTimes::Array{Float64, 2},
+        numRides::Array{Int, 2};
+        num_nodes::Int = MANHATTAN_NODES,
+        sample_size::Int = 5000
+    )
 	newTravelTimes = zeros(num_nodes, num_nodes)
 	newNumRides = zeros(Int, (num_nodes, num_nodes))
 	for i = 1:sample_size
