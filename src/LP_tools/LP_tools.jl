@@ -180,7 +180,7 @@ function count_number_edges_used(totalPaths::Array{Any,1}, manhattan::Manhattan)
     Given the array of paths being used, decide how many (and which) edges are being used
     """
     graph = manhattan.network
-    edges_in = BitArray(nv(graph), nv(graph))
+    edges_in = falses(nv(graph), nv(graph))
     for i = 1:length(totalPaths)
         for j = 1:length(totalPaths[i])
             for k = 1:(length(totalPaths[i][j]) - 1)
