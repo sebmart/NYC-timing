@@ -147,6 +147,7 @@ function fast_LP(
 	else
 		errorFile = open("Outputs/$(TESTDIR)/errorstats.csv", "w")
 	end
+	costFunctionFile = open("Outputs/$(TESTDIR)/cf.csv")
 	# Runtime info output
 	timeFile = open("Outputs/$(TESTDIR)/timestats.csv", "w")
 	if dynamicConstraints
@@ -264,9 +265,6 @@ function fast_LP(
 		# Update paths
 		if !(startWithSimpleLP) || l > 1
 			totalPaths, totalNumExpensiveTurns, numPaths = updatePaths(paths, numExpensiveTurns, totalPaths, totalNumExpensiveTurns, numPaths, maxNumPathsPerOD=maxNumPathsPerOD, times=newTimes, turnCost=turnCost, travelTimes=travelTimes, numRides=numRides, srcs=srcs, dsts=dsts, dynamicConstraints=dynamicConstraints, globalConstraintUpdate=globalConstraintUpdate)
-			println("Type check: ")
-			println(typeof(totalPaths))
-			println(typeof(numExpensiveTurns))
 		else
 			for i = 1:numDataPoints
 				numPaths[i] = length(totalPaths[i])
@@ -313,7 +311,11 @@ function fast_LP(
 			print_iis_gurobi(m)
 			break
 		end
+		result = getValue(t)
 		objective = getObjectiveValue(m)
+		# Update cost function log
+		write(costFunctionFile, string(l, ",", objective, "\n"))
+		flush(costFunctionFile)
 		if turnCostAsVariable
 			println("Left turn cost: ", getValue(tc))
 		end
@@ -366,7 +368,9 @@ function fast_LP(
 			break
 		# Prepare output
 		elseif status == :Optimal || status == :Suboptimal || status == :UserLimit
-			result = getValue(t)
+			if status != :UserLimit
+				result = getValue(t)
+			end
 			newTimes = spzeros(length(nodes), length(nodes))
 			for element in result
 				newTimes[element[1], element[2]] = element[3]
@@ -377,7 +381,7 @@ function fast_LP(
 			else
 				saveRoadTimes(newTimes, "$TESTDIR/manhattan-times-$l")
 			end
-			if abs(objective - old_objective)/old_objective < 1e-10
+			if abs(objective - old_objective)/old_objective < 1e-3
 				save("Outputs/$TESTDIR/end.jld", "num_iter", l)
 				l = max_rounds
 			else
@@ -408,14 +412,11 @@ function fast_LP(
 				end
 			end
 			if dynamicConstraints
-				write(numConstraintsFile, string(l,",",length(srcs), "\n"))
+				write(numConstraintsFile, string(l,",",length(srcs),",", count_number_edges_used(totalPaths, manhattan),"\n"))
 				flush(numConstraintsFile)
 				if l < max_rounds && l % iterationMultiple == 0
 					println("**** Updating constraint set ****")
 					srcs, dsts, totalPaths, totalNumExpensiveTurns, numPaths, pairs = updateConstraints(travelTimes, numRides, new_sp.traveltime, totalPaths, totalNumExpensiveTurns, numPaths, srcs, dsts, pairs, numNodePairsToAdd = numPairsToAdd, numNodePairsToRemove = numPairsToRemove, addOnlyIfAbovePercentile = addOnlyIfAbovePercentile, removeOnlyIfBelowPercentile = removeOnlyIfBelowPercentile)
-					println("Type check: ")
-					println(typeof(totalPaths))
-					println(typeof(numExpensiveTurns))
 					numDataPoints = length(srcs)
 				end
 			end
@@ -432,6 +433,7 @@ function fast_LP(
 	if !metropolis
 		close(errorFile)
 	end
+	close(costFunctionFile)
 	close(timeFile)
 	if dynamicConstraints
 		close(numConstraintsFile)

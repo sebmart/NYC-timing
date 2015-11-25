@@ -174,3 +174,19 @@ function findWorstPathIndex(paths::Array{Array{Int}}, numExpensiveTurns::Array{I
     end
     return indmax(pathTime)
 end
+
+function count_number_edges_used(totalPaths::Array{Any,1}, manhattan::Manhattan)
+    """
+    Given the array of paths being used, decide how many (and which) edges are being used
+    """
+    graph = manhattan.network
+    edges_in = BitArray(nv(graph), nv(graph))
+    for i = 1:length(totalPaths)
+        for j = 1:length(totalPaths[i])
+            for k = 1:(length(totalPaths[i][j]) - 1)
+                edges_in[totalPaths[i][j][k], totalPaths[i][j][k+1]] = true
+            end
+        end
+    end
+    return sum(edges_in)
+end
