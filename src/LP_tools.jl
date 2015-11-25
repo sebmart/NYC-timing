@@ -1,12 +1,12 @@
 # LP_tools.jl
 # Contains helpful functions to debug Gurobi output
-# Authored By Arthur J Delarue on 6/10/15
 
+"""
+Taken from JuMP examples online. Given a LP instance, uses Gurobi to troubleshoot
+infeasibility. Outputs IIS to find "bad" constraints.
+"""
 function print_iis_gurobi(m::Model)
-	"""
-	Taken from JuMP examples online. Given a LP instance, uses Gurobi to troubleshoot infeasibility.
-	Outputs IIS to find "bad" constraints.
-	"""
+
     grb = MathProgBase.getrawsolver(getInternalModel(m))
     Gurobi.computeIIS(grb)
     numconstr = Gurobi.num_constrs(grb)
@@ -38,11 +38,12 @@ function print_iis_gurobi(m::Model)
     println("End of IIS")
 end
 
+"""
+Taken from JuMP examples online. Given a LP instance, uses Gurobi to troubleshoot infeasibility.
+Outputs IIS to find "bad" constraints.
+"""
 function print_iis_gurobi(m::Model, im::Gurobi.GurobiMathProgModel)
-    """
-    Taken from JuMP examples online. Given a LP instance, uses Gurobi to troubleshoot infeasibility.
-    Outputs IIS to find "bad" constraints.
-    """
+
     grb = MathProgBase.getrawsolver(im)
     Gurobi.computeIIS(grb)
     numconstr = Gurobi.num_constrs(grb)
@@ -78,6 +79,9 @@ function print_iis_gurobi(m::Model, im::Gurobi.GurobiMathProgModel)
     println("End of IIS")
 end
 
+"""
+Writes relevant information for the LP to a file in the provided directory.
+"""
 function writeDataToFile(directory::AbstractString,
     model_type::AbstractString="",
     max_rounds::Int=0,
@@ -89,9 +93,7 @@ function writeDataToFile(directory::AbstractString,
     sample_size::Int=0,
     turnCost::Float64=0.,
     lambda::Float64=0.)
-    """
-    Writes relevant information for the LP to a file in the provided directory.
-    """
+
     fileName = string(directory, "/info.txt")
     outputFile = open(fileName, "w")
     write(outputFile, string(fileName, "\n"))
@@ -120,6 +122,9 @@ function writeDataToFile(directory::AbstractString,
     close(outputFile)
 end
 
+"""
+Same without lambda ?
+"""
 function writeDataToFile(directory::AbstractString,
     model_type::AbstractString="",
     max_rounds::Int=0,
@@ -129,9 +134,7 @@ function writeDataToFile(directory::AbstractString,
     num_clusters::Int=0,
     sample_size::Int=0,
     turnCost::Float64=0.)
-    """
-    Writes relevant information for the LP to a file in the provided directory.
-    """
+
     fileName = string(directory, "/info.txt")
     outputFile = open(fileName, "w")
     write(outputFile, string(fileName, "\n"))
@@ -153,21 +156,26 @@ function writeDataToFile(directory::AbstractString,
     close(outputFile)
 end
 
-function appendDataToFile(directory::AbstractString,
-    numBrokenConstraints::Int)
-    """
-    Adds the number of broken constraints through the relaxation parameter to info.txt
-    """
+"""
+Adds the number of broken constraints through the relaxation parameter to info.txt
+"""
+function appendDataToFile(directory::AbstractString, numBrokenConstraints::Int)
     fileName = string(directory, "/info.txt")
     outputFile = open(fileName, "a")
     write(outputFile, string("Constraints violated by regularization: ", numBrokenConstraints, "\n"))
     close(outputFile)
 end
 
-function findWorstPathIndex(paths::Array{Array{Int}}, numExpensiveTurns::Array{Int}, turnCost::Float64, times::AbstractArray{Float64,2})
-    """
-    Given some paths (and extra turn costs) figure out which path is the longest
-    """
+"""
+Given some paths (and extra turn costs) figure out which path is the longest
+"""
+function findWorstPathIndex(
+		paths::Array{Array{Int}},
+		numExpensiveTurns::Array{Int},
+		turnCost::Float64,
+		times::AbstractArray{Float64,2}
+	)
+
     pathTime = zeros(length(numExpensiveTurns))
     for i = 1:length(pathTime)
         pathTime[i] = sum([times[paths[i][a],paths[i][a+1]] for a = 1:(length(paths[i])-1)]) + numExpensiveTurns[i] * turnCost
@@ -175,10 +183,11 @@ function findWorstPathIndex(paths::Array{Array{Int}}, numExpensiveTurns::Array{I
     return indmax(pathTime)
 end
 
+"""
+Given the array of paths being used, decide how many (and which) edges are being used
+"""
 function count_number_edges_used(totalPaths::Array{Any,1}, manhattan::Manhattan)
-    """
-    Given the array of paths being used, decide how many (and which) edges are being used
-    """
+
     graph = manhattan.network
     edges_in = falses(nv(graph), nv(graph))
     for i = 1:length(totalPaths)

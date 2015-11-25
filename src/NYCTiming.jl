@@ -14,11 +14,11 @@ using KDTrees
 @everywhere using MathProgBase
 @everywhere using Base.Collections
 @everywhere using DataStructures
-@everywhere using NetworkTools  
+@everywhere using NetworkTools
 @everywhere include("definitions.jl")
 @everywhere include("LP_tools/shortestpath.jl")
 
-include("LP_tools/parallel_tools.jl")
+include("parallel_tools.jl")
 include("LP_tools/LP_tools.jl")
 include("LP_tools/load_constraints.jl")
 include("LP_tools/dynamic_constraints.jl")
