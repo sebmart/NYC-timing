@@ -1,4 +1,4 @@
-function drawManhattan(man::Manhattan)
+function drawManhattan(man::Manhattan; colorScheme::Int=0)
 	minX = Inf; maxX = -Inf; minY = Inf; maxY = -Inf
 
 	for i = 1:length(man.positions)
@@ -53,9 +53,9 @@ function drawManhattan(man::Manhattan)
 
 	minscore = Inf; maxscore = -Inf
 	for edge in edges(man.network)
-		if man.roadTime[src(edge), dst(edge)] == 0
-			println(edge)
-		end
+		# if man.roadTime[src(edge), dst(edge)] == 0
+		# 	println(edge)
+		# end
 		score = man.distances[src(edge), dst(edge)] / man.roadTime[src(edge), dst(edge)]
 		if score < minscore
 			minscore = score
@@ -74,26 +74,49 @@ function drawManhattan(man::Manhattan)
 			e = Vector2f(nc[endNode].x, nc[endNode].y)
 			road = Line(s, e, 1)
 
-			score = m.distances[src(edge), dst(edge)] / m.roadTime[src(edge), dst(edge)]
-			# score = m.roadTime[src(edge), dst(edge)]
-			difscore = max - min
-			avg = (max + min)/2
-			if score < min
-				r = 255.0
-				g = 0.0
-				b = 0.0
-			elseif score < (max + min)/2
-				r = 255.0
-				g = 255.0 * 2 * (score - min) / (difscore)
-				b = 0.0
-			elseif score < max
-				r = 255.0 * 2 * (score - max) / (- 1 * difscore)
-				g = 255.0
-				b = 0.0
-			else
-				r = 0.0
-				g = 255.0
-				b = 0.0
+			if colorScheme == 0
+				score = m.distances[src(edge), dst(edge)] / m.roadTime[src(edge), dst(edge)]
+				# score = m.roadTime[src(edge), dst(edge)]
+				difscore = max - min
+				avg = (max + min)/2
+				if score < min
+					r = 255.0
+					g = 0.0
+					b = 0.0
+				elseif score < (max + min)/2
+					r = 255.0
+					g = 255.0 * 2 * (score - min) / (difscore)
+					b = 0.0
+				elseif score < max
+					r = 255.0 * 2 * (score - max) / (- 1 * difscore)
+					g = 255.0
+					b = 0.0
+				else
+					r = 0.0
+					g = 255.0
+					b = 0.0
+				end
+			elseif colorScheme == 1
+				score = m.roadTime[src(edge), dst(edge)]
+				difscore = max - min
+				avg = (max + min)/2
+				if score < min
+					r = 0.0
+					g = 0.0
+					b = 255.0
+				elseif score < (max + min)/2
+					r = 255.0 * 2 * (score - min) / (difscore)
+					g = 255.0 * 2 * (score - min) / (difscore)
+					b = 255.0
+				elseif score < max
+					r = 255.0 
+					g = 255.0 * 2 * (score - max) / (- 1 * difscore)
+					b = 255.0 * 2 * (score - max) / (- 1 * difscore)
+				else
+					r = 255.0
+					g = 0.0
+					b = 0.0
+				end
 			end
 			set_fillcolor(road, SFML.Color(floor(Int, r), floor(Int, g), floor(Int,b)))
 			if true
@@ -104,8 +127,13 @@ function drawManhattan(man::Manhattan)
 	end
 
 	# set minscore and maxscore
-	minscore = 0/3.6
-	maxscore = 50/3.6
+	if colorScheme == 0
+		minscore = 0/3.6
+		maxscore = 50/3.6
+	elseif colorScheme == 1
+		minscore = -20.
+		maxscore = 20.
+	end
 	roads = generateRoads(man, nodeCoordinates, minscore, maxscore)
 
 	# Creates the window for the visualization
