@@ -249,7 +249,7 @@ function updatePaths(
 				end
 			# If we need to remove a path
 			else
-				worstIndex = findWorstPathIndex(totalPaths[i], totalNumExpensiveTurns[i], turnCost, newTimes)
+				worstIndex = findWorstPathIndex(totalPaths[i], totalNumExpensiveTurns[i], turnCost, times)
 				if worstIndex == 1
 					totalPaths[i][1] = paths[i]
 					totalNumExpensiveTurns[i][1] = numExpensiveTurns[i]
