@@ -90,7 +90,7 @@ end
 JSONfile, params = load_parameters()
 
 # run code
-status, new_times, directory = @time fast_LP_test(model_type=params["MODEL"], last_smooth=params["LAST_SMOOTH"], prob=params["PROB"], max_rounds=params["MAX_ROUNDS"], min_rides=params["MIN_RIDES"], turnCost=params["TURN_COST"], turnCostAsVariable=params["TURN_COST_AS_VARIABLE"], delta_bound=params["DELTA_BOUND"], maxNumPathsPerOD=params["MAX_NUM_PATHS_PER_OD"], dynamicConstraints=params["DYNAMIC_CONSTRAINTS"], numPairsToAdd = params["NUM_OD_ADDED"], numpairsToRemove = params["NUM_OD_REMOVED"], iterationMultiple = params["UPDATE_EVERY_N_ITERATIONS"], addOnlyIfAbovePercentile = params["ADD_IF_ABOVE_PERCENTILE"], removeOnlyIfBelowPercentile:: = params["REMOVE_IF_BELOW_PERCENTILE"], globalConstraintUpdate = params["GLOBAL_CONSTRAINT_UPDATE"], sample_size=params["SAMPLE_SIZE"], startWithSimpleLP=params["START_SIMPLE"])
+status, new_times, directory = @time fast_LP_test(model_type=params["MODEL"], last_smooth=params["LAST_SMOOTH"], prob=params["PROB"], max_rounds=params["MAX_ROUNDS"], min_rides=params["MIN_RIDES"], turnCost=params["TURN_COST"], turnCostAsVariable=params["TURN_COST_AS_VARIABLE"], delta_bound=params["DELTA_BOUND"], maxNumPathsPerOD=params["MAX_NUM_PATHS_PER_OD"], dynamicConstraints=params["DYNAMIC_CONSTRAINTS"], numPairsToAdd = params["NUM_OD_ADDED"], numpairsToRemove = params["NUM_OD_REMOVED"], iterationMultiple = params["UPDATE_EVERY_N_ITERATIONS"], addOnlyIfAbovePercentile = params["ADD_IF_ABOVE_PERCENTILE"], removeOnlyIfBelowPercentile = params["REMOVE_IF_BELOW_PERCENTILE"], globalConstraintUpdate = params["GLOBAL_CONSTRAINT_UPDATE"], sample_size=params["SAMPLE_SIZE"], startWithSimpleLP=params["START_SIMPLE"])
 
 # Move log files
 f=open(string(directory, "timestats.csv"), "a")
