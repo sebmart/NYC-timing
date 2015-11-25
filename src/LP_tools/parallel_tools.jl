@@ -1,11 +1,17 @@
 # parallel_tools.jl
-# tools for LP that involve parallel computing (LP_tools.jl was overflowing)
-# Authored by Arthur J Delarue on 7/29/15
+# tools that involve parallel computing
 
-function parallelShortestPaths(n::Network, roadTime::SparseMatrixCSC{Float64, Int},roadCost::SparseMatrixCSC{Float64, Int})
-	"""
-	Computes all-pairs shortest paths in a network by distributing jobs evenly over avilable cores. Not fastest implementation because jobs are divided into as many pieces as there are CPUs, and each CPU ends up with a large chunk of jobs, so the time is limited by the slowest processor.
-	"""
+"""
+	Computes all-pairs shortest paths in a network by distributing jobs evenly
+	over available cores. Not fastest implementation because jobs are divided
+	into as many pieces as there are CPUs, and each CPU ends up with a large
+	chunk of jobs, so the time is limited by the slowest processor.
+"""
+function parallelShortestPaths(
+		n::Network,
+		roadTime::SparseMatrixCSC{Float64, Int},
+	    roadCost::SparseMatrixCSC{Float64, Int}
+	)
 	# Get number of nodes
 	nLocs  = length( vertices(n))
 	# Find number of cores
@@ -14,7 +20,7 @@ function parallelShortestPaths(n::Network, roadTime::SparseMatrixCSC{Float64, In
 	# Start processes
 	results = cell(nCpus)
 	for i = 1:nCpus
-		results[i] = @spawnat i partialShortestPaths(n, (div((i-1) * nLocs, nCpus)+1):(div(i * nLocs,nCpus)), roadTime, roadCost)
+		results[i] = @spawnat i partialShortestPaths(n, (div((i-1) * nLocs, nCpus)+1):(div(i * nLocs,nCpus)),roadTime, roadCost)
 	end
 	# Create return arrays
 	pathTime = Array(Float64, (nLocs,nLocs))
@@ -28,14 +34,22 @@ function parallelShortestPaths(n::Network, roadTime::SparseMatrixCSC{Float64, In
 		pathCost[irange,:] = tmp_cost
 		previous[irange,:] = tmp_prev
 	end
-	
+
 	return ShortPaths(pathTime, pathCost, previous)
 end
 
-@everywhere function parallelShortestPathsAuto(n::Network, roadTime::SparseMatrixCSC{Float64, Int},roadCost::SparseMatrixCSC{Float64, Int}; batch_size::Int = 400)
-	"""
-	Computes all-pairs shortest paths in a network by separating jobs into chunks of size batch_size (default 100) and letting pmap() deal with assigning them to the next available CPU. With the right batch_size this is the fastest method.
-	"""
+"""
+Computes all-pairs shortest paths in a network by separating jobs into chunks of
+size batch_size (default 100) and letting pmap() deal with assigning them to the
+next available CPU. With the right batch_size this is the fastest method.
+"""
+@everywhere function parallelShortestPathsAuto(
+		n::Network,
+		roadTime::SparseMatrixCSC{Float64, Int},
+		roadCost::SparseMatrixCSC{Float64, Int};
+		batch_size::Int = 400
+	)
+
 	# Get number of nodes
 	nLocs  = length( vertices(n))
 	# Initialize arrays for shortest paths
@@ -64,10 +78,19 @@ end
 	return ShortPaths(pathTime, pathCost, previous)
 end
 
-@everywhere function parallelShortestPathsWithTurnsAuto(n::Network, new_n::Network, newRoadTime::SparseMatrixCSC{Float64, Int},new_nodes::Array{Array{Int}}; batch_size::Int = 400)
-    """
-    Computes all-pairs shortest paths with turns in a properly modified network by separating jobs into chunks of size batch_size (default 100) and letting pmap() deal with assigning them to the next available CPU. With the right batch_size this is the fastest method.
-    """
+"""
+Computes all-pairs shortest paths with turns in a properly modified network by separating
+jobs into chunks of size batch_size (default 100) and letting pmap() deal with assigning
+them to the next available CPU. With the right batch_size this is the fastest method.
+"""
+@everywhere function parallelShortestPathsWithTurnsAuto(
+		n::Network,
+		new_n::Network,
+		newRoadTime::SparseMatrixCSC{Float64, Int},
+		new_nodes::Array{Array{Int}};
+		batch_size::Int = 400
+	)
+
     # Get number of nodes
     nLocs  = nv(n)
     nRealLocs = nv(new_n)
@@ -99,10 +122,12 @@ end
     return RealPaths(previous, pathTime, realDsts)
 end
 
+"""
+Function divides a unit range into an array of smaller unitranges of a given size, such that
+all the same integers are still covered.
+"""
 @everywhere function splitLocations(locs::UnitRange{Int}, size::Int)
-	"""
-	Function divides a unit range into an array of smaller unitranges of a given size, such that all the same integers are still covered.
-	"""
+
     result = UnitRange{Int}[]
     b = 1
     # While there are still elements to be covered
@@ -116,10 +141,17 @@ end
     return result
 end
 
-@everywhere function partialShortestPaths(n::Network, locs::UnitRange{Int}, roadTime::SparseMatrixCSC{Float64, Int}, roadCost::SparseMatrixCSC{Float64, Int})
-	"""
-	Given a graph and a set of locations in the graph, runs Dijkstra from each provided node to find the SSSP from each given node (subset of APSP).
-	"""
+"""
+Given a graph and a set of locations in the graph, runs Dijkstra from each provided node to
+find the SSSP from each given node (subset of APSP).
+"""
+@everywhere function partialShortestPaths(
+		n::Network,
+		locs::UnitRange{Int},
+		roadTime::SparseMatrixCSC{Float64, Int},
+		roadCost::SparseMatrixCSC{Float64, Int}
+	)
+
 	# Get number of nodes
 	nLocs  = length( vertices(n))
 	# Initialize return types
@@ -138,10 +170,18 @@ end
 	return partialPathTime, partialPathCost, partialPrevious
 end
 
-@everywhere function partialShortestPathsWithTurns(n::Network, new_n::Network, locs::UnitRange{Int}, newRoadTime::SparseMatrixCSC{Float64,Int}, new_nodes::Array{Array{Int}})
-    """
-    Given a graph, a modified graph (for turn costs) and a set of locations in the graph, runs Dijkstra from each provided node to find the SSSP from each given node (subset of APSP).
-    """
+"""
+Given a graph, a modified graph (for turn costs) and a set of locations in the graph,
+runs Dijkstra from each provided node to find the SSSP from each given node (subset of APSP).
+"""
+@everywhere function partialShortestPathsWithTurns(
+		n::Network,
+		new_n::Network,
+		locs::UnitRange{Int},
+		newRoadTime::SparseMatrixCSC{Float64,Int},
+		new_nodes::Array{Array{Int}}
+	)
+
     # Get number of nodes
     nLocs  = nv(n)
     nRealLocs = nv(new_n)
@@ -161,15 +201,16 @@ end
     return partialRealDsts, partialPathTime, partialPrevious
 end
 
+"""
+Performs Dijkstra's algorithm from node src on graph g using weights edge_dists.
+Returns parents, travel times and travel costs as vectors.
+"""
 @everywhere function custom_dijkstra_par(
     g::SimpleGraph,
     src::Int,
     edge_dists::AbstractArray{Float64, 2},
     edge_costs::AbstractArray{Float64, 2})
-    """
-    Performs Dijkstra's algorithm from node src on graph g using weights edge_dists.
-    Returns parents, travel times and travel costs as vectors.
-    """
+
     nvg = nv(g)
     dists = fill(typemax(Float64), nvg)
     costs = fill(typemax(Float64), nvg)
@@ -219,20 +260,22 @@ end
     return parents, dists, costs
 end
 
+"""
+Modified version of Dijkstra, to be run on a modified graph (that includes left turn costs).
+Takes an old graph g, as well as modified graph newGraph. Runs Dijkstra from source src,
+using edge weights new_edge_dists. new_nodes : map from nodes in g to nodes in newGraph
+Returns:
+parents, a vector of parents in the MODIFIED graph
+real_dists/real_costs, vectors of distances/costs in the UNMODIFIED graph
+real_dsts, a map of each node to the corresponding reached node in Dijkstra, in the MODIFIED graph
+"""
+
 @everywhere function custom_dijkstra_with_turn_cost(
-    g::SimpleGraph,
-    newGraph::SimpleGraph,
-    src::Int,
-    new_edge_dists::AbstractArray{Float64, 2},
-    new_nodes::Array{Array{Int}})
-    """
-    Modified version of Dijkstra, to be run on a modified graph (that includes left turn costs). Takes in old graph g, as well as modified graph newGraph. Runs Dijkstra from source src, using edge weights new_edge_dists.
-    new_nodes : map from nodes in g to nodes in newGraph
-    Returns:
-    parents, a vector of parents in the MODIFIED graph
-    real_dists/real_costs, vectors of distances/costs in the UNMODIFIED graph
-    real_dsts, a map of each node to the corresponding reached node in Dijkstra, in the MODIFIED graph
-    """
+	    g::SimpleGraph,
+	    newGraph::SimpleGraph,
+	    src::Int,
+	    new_edge_dists::AbstractArray{Float64, 2},
+	    new_nodes::Array{Array{Int}})
     n = nv(g)
     real_dists = zeros(Float64, n)
     real_dsts = zeros(Int, n)
@@ -247,7 +290,7 @@ end
     sizehint!(h, nvg)
     H = mutable_binary_minheap(h)
     hmap = zeros(Int, nvg)
-    
+
     # Add all sources to heap (possibly multiple)
     for src2 in new_nodes[src]
         dists[src2] = 0.0
@@ -291,17 +334,18 @@ end
     return parents, real_dists, real_dsts
 end
 
+"""
+Given a graph g, modifies it so that left turns are afflicted with the extra cost turn_cost.
+Requires old edge_costs as well as geographic coordinates of nodes (to determine left turns).
+Returns new network, new edge weights, and map from nodes in g to nodes in the new graph as
+a list of lists. Also returns float array that represents whether an edge is 'expensive' or not
+"""
 @everywhere function modifyGraphForDijkstra(
     g::SimpleGraph,
     edge_dists::AbstractArray{Float64, 2},
     coords::Array{Coordinates, 1};
     turn_cost::Float64 = 10.0)
-    """
-    Given a graph g, modifies it so that left turns are afflicted with the extra cost turn_cost.
-    Requires old edge_costs as well as geographic coordinates of nodes (to determine left turns).
-    Returns new network, new edge weights, and map from nodes in g to nodes in the new graph as a list of lists.
-    Also returns float array that represents whether an edge is 'expensive' or not
-    """
+
 
     function getAngleToPoint(currentAngle::Float64, currentX::Float64, currentY::Float64, targetX::Float64, targetY::Float64)
         """
@@ -326,7 +370,7 @@ end
         edgeAngle = getAngleToPoint(currentAngle, xm, ym, xe, ye)
         return edgeAngle
     end
-    
+
     # Define some early variables
     nvg = nv(g)
     out = [sort(out_neighbors(g,i)) for i = 1:nvg]
@@ -367,10 +411,10 @@ end
     return newGraph, new_edge_dists, new_nodes, new_edge_isExpensive
 end
 
+"""
+Given mapping from old nodes to new, returns mapping from new nodes to old.
+"""
 @everywhere function getInverseMapping(new_nodes::Array{Array{Int}}, numNewVertices::Int)
-    """
-    Given mapping from old nodes to new, returns mapping from new nodes to old.
-    """
     old_nodes = zeros(Int, numNewVertices)
     for (i, array) in enumerate(new_nodes)
         for j in array
@@ -380,10 +424,11 @@ end
     return old_nodes
 end
 
+"""
+Given an array, returns an array of arrays of size batch_size containing all the same elements.
+"""
 @everywhere function splitArray(array::Array{Int}, batch_size::Int)
-    """
-    Given an array, returns an array of arrays of size batch_size containing all the same elements.
-    """
+
     indices = splitLocations(1:length(array), batch_size)
     split_array = fill(Int[],length(indices))
     for i = 1:length(indices)
@@ -392,6 +437,11 @@ end
     return split_array
 end
 
+"""
+Given an array of sources and a corresponding array of destinations, returns the used paths
+ in the old graph, and the number of expensive turns (i.e. left turns) along each path.
+Parallelized for speed.
+"""
 @everywhere function reconstructMultiplePathsWithExpensiveTurnsParallel(
     previous::Array{Int, 2},
     srcs::Array{Int},
@@ -400,10 +450,7 @@ end
     real_dsts::Array{Int},
     new_edge_isExpensive::AbstractArray{Float64,2};
     batch_size=30000)
-    """
-    Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
-    Parallelized for speed.
-    """
+
     # Don't run parallelized version if it would be inefficient
     if length(srcs) < batch_size
         return reconstructMultiplePathsWithExpensiveTurns(previous, srcs, dsts, old_nodes, real_dsts, new_edge_isExpensive)
@@ -434,6 +481,9 @@ end
     return paths, expensiveTurns
 end
 
+"""
+Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
+"""
 @everywhere function reconstructMultiplePathsWithExpensiveTurns(
     previous::Array{Int,2},
     srcs::Array{Int},
@@ -441,9 +491,7 @@ end
     old_nodes::Array{Int},
     real_dsts::Array{Int,2},
     new_edge_isExpensive::AbstractArray{Float64,2})
-    """
-    Given an array of sources and a corresponding array of destinations, returns the used paths in the old graph, and the number of expensive turns (i.e. left turns) along each path.
-    """
+
     expensiveTurns = zeros(Int, length(srcs))
     paths = fill(Int[], length(srcs))
     for i = 1:length(srcs)
@@ -454,6 +502,9 @@ end
     return paths, expensiveTurns
 end
 
+"""
+Given a previous object, a source and a destination, returns the used path in the old graph, and the number of expensive turns (i.e. left turns) along the path.
+"""
 @everywhere function reconstructPathWithExpensiveTurns(
     previous::Array{Int},
     src::Int,
@@ -461,9 +512,7 @@ end
     old_nodes::Array{Int},
     real_dsts::Array{Int},
     new_edge_isExpensive::AbstractArray{Float64,2})
-    """
-    Given a previous object, a source and a destination, returns the used path in the old graph, and the number of expensive turns (i.e. left turns) along the path.
-    """
+
     expensiveTurns = 0::Int
     # Initialize path in real graph
     pathNodes = [dst]
@@ -489,6 +538,9 @@ end
     return pathNodes, expensiveTurns
 end
 
+"""
+Return full path as list of (road, time) tuples.
+"""
 function reconstructFullPath(
     previous::Array{Int},
     src::Int,
@@ -496,9 +548,7 @@ function reconstructFullPath(
     old_nodes::Array{Int},
     real_dsts::Array{Int},
     new_edge_isExpensive::AbstractArray{Float64,2})
-    """
-    Return full path as list of (road, time) tuples. 
-    """
+
     # Initialize path in real graph
     path = (Road, Float64)[]
     k = real_dsts[dst]
