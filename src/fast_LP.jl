@@ -147,7 +147,7 @@ function fast_LP(
 	else
 		errorFile = open("Outputs/$(TESTDIR)/errorstats.csv", "w")
 	end
-	costFunctionFile = open("Outputs/$(TESTDIR)/cf.csv")
+	costFunctionFile = open("Outputs/$(TESTDIR)/cf.csv", "w")
 	# Runtime info output
 	timeFile = open("Outputs/$(TESTDIR)/timestats.csv", "w")
 	if dynamicConstraints
