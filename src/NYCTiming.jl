@@ -14,9 +14,8 @@ using KDTrees
 @everywhere using MathProgBase
 @everywhere using Base.Collections
 @everywhere using DataStructures
-
+@everywhere using NetworkTools  
 @everywhere include("definitions.jl")
-@everywhere include("LP_tools/manhattan.jl")
 @everywhere include("LP_tools/shortestpath.jl")
 
 include("LP_tools/parallel_tools.jl")
