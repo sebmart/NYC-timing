@@ -26,7 +26,7 @@ function new_LP(
 	roadTimes::AbstractArray{Float64, 2},
 	distances::AbstractArray{Float64, 2},
 	positions::Array{Coordinates};
-	model_type::String=MODEL,
+	model_type::AbstractString=MODEL,
 	max_rounds::Int=MAX_ROUNDS,
 	min_rides::Int=MIN_RIDES,
 	turnCost::Float64=TURN_COST,
@@ -186,7 +186,7 @@ function new_LP(
 			# If this is the first path for this pair of nodes
 			elseif length(hashedPaths[i]) == 0
 				hashedPaths[i] = Set([hash(paths[i])])
-				hashedPathIndices[i] = [hash(paths[i]) => 1]
+				hashedPathIndices[i] = Dict{Uint64, Int64}(hash(paths[i]) => 1)
 				path[i,1] = @addConstraint(m, sum{t[paths[i][a],paths[i][a+1]], a=1:(length(paths[i])-1)} - T[srcs[i],dsts[i]] == - turnCost * numExpensiveTurns[i])
 				push!(pathLowerBounds, - turnCost * numExpensiveTurns[i])
 				push!(pathUpperBounds, - turnCost * numExpensiveTurns[i])
@@ -381,7 +381,7 @@ function compute_error(realData::AbstractArray{Float64, 2}, inputData::AbstractA
 	return average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error, average_link_bias
 end
 
-function printErrorStatsToFile(fileName::String, realData::AbstractArray{Float64, 2}, inputData::AbstractArray{Float64, 2}, algorithmData::AbstractArray{Float64}, numRides::AbstractArray{Int, 2}, realLinkTimes::AbstractArray{Float64,2}, newLinkTimes::AbstractArray{Float64,2}; num_nodes::Int = 192, out=Array{Int}[])
+function printErrorStatsToFile(fileName::AbstractString, realData::AbstractArray{Float64, 2}, inputData::AbstractArray{Float64, 2}, algorithmData::AbstractArray{Float64}, numRides::AbstractArray{Int, 2}, realLinkTimes::AbstractArray{Float64,2}, newLinkTimes::AbstractArray{Float64,2}; num_nodes::Int = 192, out=Array{Int}[])
 	average_squared_error, average_relative_error, average_bias, average_nonzero_input_error, average_nonzero_result_error, average_link_relative_error, average_link_bias = compute_error(realData, inputData, algorithmData, numRides, realLinkTimes, newLinkTimes, num_nodes=num_nodes, out=out)
 	"""
 	Same as compute_error, except prints to file as well

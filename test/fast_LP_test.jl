@@ -23,7 +23,7 @@ ADD_IF_ABOVE_PERCENTILE = 0.7		# only add rides that have an error above this pe
 REMOVE_IF_BELOW_PERCENTILE = 0.3	# only remove rides that have an error below this percentile
 
 function fast_LP_test(;
-	model_type::String=MODEL,
+	model_type::AbstractString=MODEL,
 	last_smooth::Bool=LAST_SMOOTH,
 	prob::Float64=PROB,
 	max_rounds::Int=MAX_ROUNDS,
