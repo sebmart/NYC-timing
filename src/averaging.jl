@@ -2,7 +2,7 @@
 # Small module to test lower bounds on error in Manhattan
 # Authored by Arthur Delarue on 11/30/15
 
-function average_manhattan_results(fileList::Array{AbstractString, 1})
+function average_manhattan_results(fileList)
 	for (i,fileName) in enumerate(fileList)
 		if i == 1
 			times = load(fileName, "times")
