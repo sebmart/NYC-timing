@@ -372,8 +372,8 @@ function fast_LP(
 				result = getValue(t)
 			end
 			newTimes = spzeros(length(nodes), length(nodes))
-			for element in result
-				newTimes[element[1], element[2]] = element[3]
+			for key in keys(result)
+				newTimes[key[1], key[2]] = result[key[1], key[2]]
 			end
 			# Save updated Manhattan road times to file
 			if metropolis
