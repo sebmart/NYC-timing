@@ -3,6 +3,7 @@
 # Authored by Arthur Delarue on 11/30/15
 
 function average_manhattan_results(fileList)
+	times = spzeros(6134, 6134)
 	for (i,fileName) in enumerate(fileList)
 		if i == 1
 			times = load(fileName, "times")
