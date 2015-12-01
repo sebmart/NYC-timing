@@ -20,7 +20,7 @@ function average_manhattan_results(fileList)
 			travelTimes = (travelTimes .* (i - 1) + new_sp.traveltime) ./ i
 		end
 	end
-	return times
+	return travelTimes
 end
 
 newTravelTimes = average_manhattan_results([
