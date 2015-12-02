@@ -67,17 +67,25 @@ function loadRides(;year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays
 	return df2
 end
 
-function splitTrainingAndTestingSets(df::DataFrame, inverseTestingSetFraction::Int)
+function splitTrainingAndTestingSets(df::DataFrame, inverseTestingSetFraction::Int; split_type::AbstractString = "random")
 	"""
 	Takes in DataFrame with rides. Returns two DataFrames, one for training and the other for testing
+	split_type can be random or localized
 	"""
-	shuf = shuffle(collect(1:nrow(df)))
-	testDf = df[shuf[1:round(Int,length(shuf)/inverseTestingSetFraction)],:]
-	trainDf= df[shuf[(round(Int,length(shuf)/inverseTestingSetFraction) + 1):end],:]
+	if split_type == "random"
+		shuf = shuffle(collect(1:nrow(df)))
+		testDf = df[shuf[1:round(Int,length(shuf)/inverseTestingSetFraction)],:]
+		trainDf= df[shuf[(round(Int,length(shuf)/inverseTestingSetFraction) + 1):end],:]
+	else
+		p = (1000, -1200, -1000, -3200)
+		rad = 2000
+		trainDf = df[(df[:,:pX]- p[1]).^2 + (df[:,:pY] - p[2]).^2 + (df[:,:dX] - p[3]).^2 + (df[:,:dY] - p[4]).^2 .> rad^2, :]
+		testDf = df[(df[:,:pX] -p[1]).^2 + (df[:,:pY] - p[2]).^2 + (df[:,:dX] - p[3]).^2 + (df[:,:dY] - p[4]).^2 .<= rad^2, :]
+	end
 	return trainDf, testDf
 end
 
-function loadTrainingAndTestingSets(;year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true)
+function loadTrainingAndTestingSets(;year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache::Bool = true, split_training_type::AbstractString = "random")
 	"""
 	Loads dataframe for rides, splits off 20% for permanent testing set (NEVER to be touched), then splits training set into 80% tr-learning and 20% tr-testing sets
 	"""
@@ -87,17 +95,23 @@ function loadTrainingAndTestingSets(;year::Int=2013, startTime::Int=12, endTime:
 	else
 		fileName = string(fileName, "_we")
 	end
-	testingFileName = string(fileName, "_testing.jld")
-	trainLearnFileName = string(fileName, "_tr_learn.jld")
-	trainTestFileName = string(fileName, "_tr_test.jld")
+	if split_training_type == "random"
+		testingFileName = string(fileName, "_testing.jld")
+		trainLearnFileName = string(fileName, "_tr_learn.jld")
+		trainTestFileName = string(fileName, "_tr_test.jld")
+	elseif split_training_type == "localized"
+		testingFileName = string(fileName, "_loc_testing.jld")
+		trainLearnFileName = string(fileName, "_loc_tr_learn.jld")
+		trainTestFileName = string(fileName, "_loc_tr_test.jld")
+	end
 	if isfile(testingFileName) && isfile(trainLearnFileName) && isfile(trainTestFileName) && loadFromCache
 		testDf = load(testingFileName, "df")
 		trainLearnDf = load(trainLearnFileName, "df")
 		trainTestDf = load(trainTestFileName, "df")
 	else
 		df = loadRides(startTime=startTime, endTime=endTime, weekdays=weekdays,startMonth=startMonth, endMonth=endMonth, loadFromCache=true)
-		trainDf, testDf = splitTrainingAndTestingSets(df, 5)
-		trainLearnDf, trainTestDf = splitTrainingAndTestingSets(trainDf, 5)
+		trainDf, testDf = splitTrainingAndTestingSets(df, 5, split_type = "random")
+		trainLearnDf, trainTestDf = splitTrainingAndTestingSets(trainDf, 0, split_type = split_training_type)
 		save(testingFileName, "df", testDf)
 		save(trainLearnFileName, "df", trainLearnDf)
 		save(trainTestFileName, "df", trainTestDf)
@@ -154,7 +168,7 @@ function mapRidesToNodes(trainDf::DataFrame, nodePositions::Array{Coordinates, 1
 	return travelTimes, numRides
 end
 
-function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::AbstractString; year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true, radius::Int=140)
+function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::AbstractString; year::Int=2013, startTime::Int=12, endTime::Int=14, weekdays::Bool = true, startMonth::Int=1, endMonth::Int=1, loadFromCache = true, radius::Int=140, split_training_type::AbstractString = "random")
 	"""
 	Top level function, called before fast_LP to load travel times for data.
 	"""
@@ -166,9 +180,14 @@ function loadInputTravelTimes(nodePositions::Array{Coordinates}, method::Abstrac
 	else
 		fileName = string(fileName, "_we")
 	end
-	trainLearnFileName = string(fileName, "_tr_learn.jld")
-	trainTestFileName = string(fileName, "_tr_test.jld")
-	trainLearnDf, trainTestDf, testDf = loadTrainingAndTestingSets(startTime=startTime, endTime=endTime, weekdays=weekdays, startMonth=startMonth, endMonth=endMonth)
+	if split_training_type == "random"
+		trainLearnFileName = string(fileName, "_tr_learn.jld")
+		trainTestFileName = string(fileName, "_tr_test.jld")
+	else
+		trainLearnFileName = string(fileName, "_loc_tr_learn.jld")
+		trainTestFileName = string(fileName, "_loc_tr_test.jld")
+	end
+	trainLearnDf, trainTestDf, testDf = loadTrainingAndTestingSets(startTime=startTime, endTime=endTime, weekdays=weekdays, startMonth=startMonth, endMonth=endMonth, split_training_type=split_training_type)
 	if isfile(trainLearnFileName) && loadFromCache
 		travelTimes = load(trainLearnFileName, "travelTimes")
 		numRides = load(trainLearnFileName, "numRides")

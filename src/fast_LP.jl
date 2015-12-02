@@ -43,6 +43,8 @@ METROPOLIS = false 				# always set this to false unless you wish to crash every
 
 WARMSTART = false
 
+LOCALIZED_TESTING = false 		
+
 function fast_LP(
 	manhattan::Manhattan,
 	travelTimes::Array{Float64,2},
@@ -78,6 +80,7 @@ function fast_LP(
 	globalConstraintUpdate::Bool=GLOBAL_CONSTRAINT_UPDATE,
 	warmstart::Bool=WARMSTART,
 	metropolis::Bool=METROPOLIS,
+	localized_testing::AbstractString=LOCALIZED_TESTING,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
 	prob::Float64=0.0,
@@ -129,6 +132,9 @@ function fast_LP(
 	end
 	if warmstart
 		TESTDIR=string(TESTDIR, "_ws")
+	end
+	if localized_testing
+		TESTDIR=string(TESTDIR, "_loctest")
 	end
 
 	# Create directory if necessary:
