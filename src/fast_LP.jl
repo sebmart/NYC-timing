@@ -80,7 +80,7 @@ function fast_LP(
 	globalConstraintUpdate::Bool=GLOBAL_CONSTRAINT_UPDATE,
 	warmstart::Bool=WARMSTART,
 	metropolis::Bool=METROPOLIS,
-	localized_testing::AbstractString=LOCALIZED_TESTING,
+	localized_testing::Bool=LOCALIZED_TESTING,
 	real_TOD_metropolis::AbstractArray{Float64}=zeros(1,1),
 	real_tij_metropolis::AbstractArray{Float64}=zeros(1,1),
 	prob::Float64=0.0,
