@@ -1,6 +1,7 @@
 # NYC-timing
 
 Code for travel time estimation from taxi ride data.
+This code is little old and uses Julia 0.4. It is unlikely that it will run on first try as most packages are now outdated, but feel free to look into the code to see the implemented algorithms.
 
 ## Workflow
 #### Interactive mode
